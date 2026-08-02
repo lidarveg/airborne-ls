@@ -1,0 +1,801 @@
+#!/usr/bin/env python
+
+"""
+###################################################################################################
+#
+# Purpose: Operational processing of .las/.laz files for standardised productions.
+#          This incorporates surrounding tiles to eliminate edge effects.
+#
+# Approach: Process all tiles individually and merge at the project scale,
+#           ultimately leaving no intermediate products.
+#
+# Assumptions:
+# - Northing and easting tile locations are included in the filename.
+# - New sub-tile indexing has been applied to optimise memory usage.
+#
+# Note: The resolution and point density of the datasets will significantly influence processing times.
+#       The computation of the CHM is slow, will seek to optimise. 
+#
+####################################################################################################
+"""
+
+from __future__ import division, print_function
+
+import argparse
+import os
+import sys
+from pathlib import Path
+import laspy
+import numpy as np
+from rios import rat
+import logging
+from scipy import ndimage
+
+# ALS Modules
+from airborne-ls import (
+    fpc_method,
+    gridding_methods,
+    filenaming_methods,
+    rw_image_methods,
+    lazfile_rw,
+)
+
+logger = logging.getLogger(__name__)
+logging.basicConfig(
+    level=logging.ERROR, format="%(asctime)s: %(name)20s: %(levelname)10s: %(message)s"
+)
+
+
+# Default constants
+firstReturnCode = 1
+CLASSIFICATION_GROUND = 2
+las_st = "ul"  # Requires filename to use upper-left naming convention
+percentiles = [1, 5, 25, 50, 75, 95, 99]
+rtnClassNull = 255
+
+
+def getCmdargs(inputargs):
+    """
+    Parse command-line arguments for running the script.
+
+    Parameters:
+        inputargs (list): List of command-line arguments.
+
+    Returns:
+        Namespace: Parsed command-line arguments.
+    """
+    parser = argparse.ArgumentParser(description="Process .las/.laz files for standardised productions.")
+
+    # Input and output directories
+    parser.add_argument("--indir", help="Directory containing LAS/LAZ files.")
+    parser.add_argument("--laz_flist", help="List of LAS/LAZ files to be processed.")
+    parser.add_argument("--tile_s", type=float, help="XY dimensions of LAS tile in metres.")    
+    parser.add_argument("--epsg", type=int, help="EPSG code for map information.")
+
+    # Output resolutions
+    parser.add_argument(
+        "--psize",
+        default=0.5,
+        type=float,
+        help="Pixel size of gridded DEM, Intensity, and maxH output layers (metres). Default: %(default)s."
+    )
+    parser.add_argument(
+        "--ptile_s",
+        default=5,
+        type=float,
+        help="Pixel size of percentile output layers (metres). Default: %(default)s."
+    )
+    parser.add_argument(
+        "--fpc_psize",
+        default=10.0,
+        type=float,
+        help="Pixel size of the FPC layer (metres). Default: %(default)s."
+    )
+    parser.add_argument(
+        "--chm_psize",
+        default=0.2,
+        type=float,
+        help="Pixel size of the CHM layer (metres). Default: %(default)s."
+    )
+
+    # File processing options
+    parser.add_argument(
+        "--startfilenum",
+        default=0,
+        type=int,
+        help="Position within laz_flist to start batch processing. Default: %(default)s."
+    )
+    parser.add_argument(
+        "--stopfilenum",
+        type=int,
+        help="Position within laz_flist to stop batch processing."
+    )
+    parser.add_argument(
+        "--split_fpc",
+        default=False,
+        action=argparse.BooleanOptionalAction,
+        help="Split flight lines for FPC calculations."
+    )
+    parser.add_argument(
+        "--overwrite",
+        default=False,
+        action=argparse.BooleanOptionalAction,
+        help="Overwrite existing layers without checking."
+    )
+
+    cmdargs = parser.parse_args(inputargs)
+
+    # Handle input file list
+    infilelist = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
+    if not infilelist.is_file():
+        laslist = list(Path(cmdargs.indir).glob("*.las"))
+        lazlist = list(Path(cmdargs.indir).glob("*.laz"))
+
+        # Process .las files
+        if laslist:
+            laslist = reorder_flist(laslist)
+            outfile = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
+            with open(outfile, "w") as fout:
+                for fn in laslist:
+                    fout.write(f"{Path(fn).name}\n")
+
+        # Process .laz files
+        if lazlist:
+            lazlist = reorder_flist(lazlist)
+            outfile = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
+            with open(outfile, "w") as fout:
+                for fn in lazlist:
+                    fout.write(f"{Path(fn).name}\n")
+
+    # Validate command-line inputs
+    laz_flist = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
+    if not laz_flist.is_file():
+        raise AssertionError("laz_flist is invalid.")
+
+    if not cmdargs.epsg:
+        raise AssertionError("EPSG code must be supplied.")
+
+    if cmdargs.stopfilenum is None:
+        if laz_flist.is_file():
+            lazlist = [line.strip() for line in open(laz_flist)]
+        cmdargs.stopfilenum = len(lazlist)
+
+    if not cmdargs.tile_s:
+        raise AssertionError("No cmdargs.tile_s supplied.")
+
+    return cmdargs
+
+def run_tile_products(cmdargs):
+    """
+    Process LAS/LAZ tiles individually and write output layers for each tile to a new folder.
+
+    Parameters:
+        cmdargs (Namespace): Parsed command-line arguments containing processing parameters.
+    """
+    # Check if the supplied pixel sizes are divisible
+    check = check_divisible([cmdargs.psize, cmdargs.ptile_s, cmdargs.fpc_psize])
+
+    # Read the list of LAS/LAZ files and extract the batch subset
+    infiles = [line.strip() for line in open(Path(cmdargs.indir).joinpath(cmdargs.laz_flist))]
+
+    if not cmdargs.stopfilenum:
+        cmdargs.stopfilenum = len(infiles)
+    if cmdargs.stopfilenum > len(infiles):
+        cmdargs.stopfilenum = len(infiles)
+
+    infiles = infiles[cmdargs.startfilenum:cmdargs.stopfilenum]
+    nullVal = -999.0    
+    neigh8 = np.array(
+        [[-1, 1], [0, 1], [1, 1], [-1, 0], [1, 0], [-1, -1], [0, -1], [1, -1]]
+    )
+
+    # Read the first file to get bin size and number of bins
+    binSize, nbins, newIdx, data = lazfile_rw.read_laz_index(
+        Path(cmdargs.indir).joinpath(infiles[0]), cmdargs.tile_s
+    )
+    del data
+
+    logger.info(f"binSize = {binSize} and nbins = {nbins} for {infiles[0]}")
+
+    # Process each file in the batch
+    for infile in infiles:
+        print(infile)
+        infileFull = Path(cmdargs.indir).joinpath(infile)
+        try:
+            assert Path.is_file(Path(infileFull))
+        except AssertionError as err:
+            logger.exception(f"LAZ file {infileFull} not found.")
+            raise err
+
+        # Parse metadata from the input file name
+        fn_dict = filenaming_methods.createTileDict(infile, cmdargs.tile_s)
+
+        # Set up output directories and filenames
+        outputDir = Path(infileFull).with_suffix('')
+        tileBasename = Path(infile).with_suffix('')
+        outputBasename = Path(outputDir).joinpath(tileBasename)
+        if not Path.is_dir(outputDir):
+            Path.mkdir(outputDir)
+        outfnames = filenaming_methods.get_outfnames(
+            outputBasename,
+            psize=cmdargs.psize,
+            ptile_s=cmdargs.ptile_s,
+            fpc_psize=cmdargs.fpc_psize,
+            chm_psize=cmdargs.chm_psize,
+            pptiles=percentiles,
+        )
+        logger.info(f"LAZ file and header read in for {infileFull}")
+
+        # Skip processing if overwrite is not allowed and files already exist
+        if not cmdargs.overwrite:
+            ## arrays to store processing segments of tiles
+            demTile = (
+                np.zeros(
+                    (
+                        int(cmdargs.tile_s / cmdargs.psize),
+                        int(cmdargs.tile_s / cmdargs.psize),
+                    )
+                )
+                + nullVal
+            )
+            csmTile= (
+                np.zeros(
+                    (
+                        int(cmdargs.tile_s / cmdargs.psize ),
+                        int(cmdargs.tile_s / cmdargs.psize ),
+                    )
+                )                
+            ) + nullVal
+            chmTile = (
+                np.zeros(
+                    (
+                        int(cmdargs.tile_s / cmdargs.chm_psize ),
+                        int(cmdargs.tile_s / cmdargs.chm_psize ),
+                    )
+                )                
+            ) #+ nullVal
+            maxhTile = (
+                np.zeros(
+                    (
+                        int(cmdargs.tile_s / cmdargs.psize),
+                        int(cmdargs.tile_s / cmdargs.psize),
+                    )
+                )
+                + nullVal
+            )
+            intensTile = (
+                np.zeros(
+                    (
+                        int(cmdargs.tile_s / cmdargs.psize),
+                        int(cmdargs.tile_s / cmdargs.psize),
+                    )
+                )
+                + nullVal
+            )
+            ptDenTile = np.zeros(
+                (
+                    int(cmdargs.tile_s / cmdargs.psize),
+                    int(cmdargs.tile_s / cmdargs.psize),
+                ),
+                dtype=np.uint16,
+            )
+            grTile = (
+                np.zeros(
+                    (
+                        int(cmdargs.tile_s / cmdargs.psize),
+                        int(cmdargs.tile_s / cmdargs.psize),
+                    ),
+                    dtype=np.uint8,
+                )
+                + 254#rtnClassNull # testing addition of new code to infill holes
+            )
+            non_grTile = (
+                np.zeros(
+                    (
+                        int(cmdargs.tile_s / cmdargs.psize),
+                        int(cmdargs.tile_s / cmdargs.psize),
+                    ),
+                    dtype=np.uint8,
+                )
+                + 254 
+            )
+            pctTile = (
+                np.zeros(
+                    (
+                        len(percentiles),
+                        int(cmdargs.tile_s / cmdargs.ptile_s),
+                        int(cmdargs.tile_s / cmdargs.ptile_s),
+                    )
+                )
+                + nullVal
+            )
+            fpcTile = (
+                np.zeros(
+                    (
+                        int(cmdargs.tile_s / cmdargs.fpc_psize),
+                        int(cmdargs.tile_s / cmdargs.fpc_psize),
+                    )
+                )
+                + rtnClassNull
+            )
+            # read in data
+            # bData stores the data in chunks/bins for rapid access
+            bData, northing, easting, rowS = lazfile_rw.bin_data(
+                cmdargs.indir, infile, cmdargs.tile_s, nbins
+            )
+
+            logger.info(f"Indexed LAZ FILE read in for {infileFull}")
+
+            nRows = int(np.ceil(binSize / cmdargs.psize))
+            nCols = int(np.ceil(binSize / cmdargs.psize))
+                       
+            for rowB in range(1, rowS + 1, 1):
+                for colB in range(1, rowS + 1, 1):
+     
+                    fnc = f"row_{rowB}_col_{colB}"                  
+                    binChunk = np.copy(bData[fnc])  ## reset as we don't need buffer
+                    chunk = np.copy(bData[fnc])                    
+                    if len(chunk) > 10:
+                        for n8 in neigh8:
+                            fn = f"row_{int(rowB + n8[0])}_col_{int(colB + n8[1])}"
+                            temp8 = np.copy(bData[fn])                            
+                            if (temp8.shape)[0] > 1:
+                                chunk = np.concatenate((chunk, temp8))        
+                          
+                        ## run dem
+                        grdhits = chunk["CLASSIFICATION"] == 2
+                        if np.sum(grdhits)>10:
+                            xst_bin = easting + int((rowB - 1) * binSize)
+                            yst_bin = northing - int((rowS - colB) * binSize)
+                            if np.sum(grdhits) > 0:
+                                dem = gridding_methods.makeDemTile(
+                                    chunk["X"][grdhits],
+                                    chunk["Y"][grdhits],
+                                    chunk["Z"][grdhits],
+                                    xst_bin,
+                                    yst_bin,
+                                    binSize,
+                                    cmdargs.psize,
+                                    nullVal=nullVal,
+                                )
+                                xst = int(int((rowB - 1) * binSize) / cmdargs.psize)
+                                yst = int(int((rowS - colB) * binSize) / cmdargs.psize)
+                                demTile[yst : (yst + nRows), xst : (xst + nRows)] = dem
+
+                            #######################################################################
+                            ## run csm
+                            xValsA, yValsA, zValsA = gridding_methods.maxH_xyzLocs(
+                                chunk["X"], chunk["Y"], chunk["Z"], cmdargs.psize)
+                            csm = gridding_methods.makeDemTile(
+                                xValsA,
+                                yValsA,
+                                zValsA,
+                                xst_bin,
+                                yst_bin,
+                                binSize,
+                                cmdargs.psize,
+                                nullVal=nullVal,
+                            )
+                            csm = csm - dem
+                            csm[dem == nullVal] = nullVal
+                            csmTile[yst : (yst + nRows), xst : (xst + nRows)] = csm
+                            csmTile[csmTile < -5] = np.nan
+                            #######################################################################                            
+                            # interp to irregular grid
+                            nonGround, groundMask = (
+                                binChunk["CLASSIFICATION"] != 2,
+                                binChunk["CLASSIFICATION"] == 2,)
+                            heightAboveGround = gridding_methods.createHeightAboveGround(
+                                nonGround,
+                                binChunk["X"],
+                                binChunk["Y"],
+                                binChunk["Z"],
+                                chunk["X"][grdhits],
+                                chunk["Y"][grdhits],
+                                chunk["Z"][grdhits],
+                            )
+               
+                            (row, col) = gridding_methods.xyToRowCol(
+                                binChunk["X"],
+                                binChunk["Y"],
+                                xst_bin,
+                                yst_bin,
+                                cmdargs.psize,
+                            )
+                            pntIntensity = binChunk["INTENSITY"]
+                            pntClass = binChunk["CLASSIFICATION"]
+                            zArr = np.zeros((nRows, nCols), dtype=np.float32) + nullVal
+                            intensityAtMaxH = (
+                                np.zeros((nRows, nCols), dtype=np.int16) + nullVal
+                            )
+                            # Everywhere that we actually have data, initialize to zero
+                            zArr[row, col] = 0
+                            intensityAtMaxH[row, col] = 0
+                            xArr = np.zeros((nRows, nCols), dtype=np.float32) + nullVal
+                            yArr = np.zeros((nRows, nCols), dtype=np.float64) + nullVal
+                            haveGroundReturn = (
+                                np.zeros((nRows, nCols), dtype=np.uint8) + 254
+                            ) #rtnClassNull
+                            nonGroundClasses = (
+                                np.zeros((nRows, nCols), dtype=np.uint8) + 254
+                            )
+
+                            gridding_methods.maxH_workflow_layers(
+                                row,
+                                col,
+                                binChunk["X"],
+                                binChunk["Y"],
+                                heightAboveGround,
+                                pntIntensity,
+                                binChunk["CLASSIFICATION"],
+                                xArr,
+                                yArr,
+                                zArr,
+                                intensityAtMaxH,
+                                nonGroundClasses,
+                                haveGroundReturn,
+                            )
+                            maxhTile[yst : (yst + nRows), xst : (xst + nRows)] = zArr
+                            intensTile[
+                                yst : (yst + nRows), xst : (xst + nRows)
+                            ] = intensityAtMaxH
+                            grTile[
+                                yst : (yst + nRows), xst : (xst + nRows)
+                            ] = haveGroundReturn
+                            non_grTile[
+                                yst : (yst + nRows), xst : (xst + nRows)
+                            ] = nonGroundClasses
+
+                            ############################################################################
+                            ## CREATE Canopy Height Model
+                            ## refer Khosravipour_2014 pit-free    
+                            number_veg_rets = np.sum(binChunk['CLASSIFICATION']==4) +\
+                                              np.sum(binChunk['CLASSIFICATION']==5)  # could drop / add classification value of 3
+                            if number_veg_rets>10:
+                                (row_chm, col_chm) = gridding_methods.xyToRowCol(binChunk["X"],binChunk["Y"],xst_bin,yst_bin,cmdargs.chm_psize )                                
+                                nRows_chm = int(np.ceil(binSize / cmdargs.chm_psize ))
+                                nCols_chm = int(np.ceil(binSize / cmdargs.chm_psize ))
+                                xst_chm = int(int((rowB - 1) * binSize) / cmdargs.chm_psize )
+                                yst_chm = int(int((rowS - colB) * binSize) / cmdargs.chm_psize )
+                                                                
+                                maxH_hag = np.zeros((nRows_chm, nCols_chm)) + nullVal                            
+                                gridding_methods.maxH_array(row_chm, col_chm, heightAboveGround, maxH_hag)                                                                                   
+                                maxH_vals = chunk['CLASSIFICATION'] <= 5 # this includes unclassified returns.. not sure of zero?
+                                chunk_hag = gridding_methods.createHeightAboveGround(
+                                    maxH_vals,
+                                    chunk["X"],
+                                    chunk["Y"],
+                                    chunk["Z"],
+                                    chunk["X"][grdhits],
+                                    chunk["Y"][grdhits],
+                                    chunk["Z"][grdhits],
+                                    )                      
+                                vals=np.logical_and(chunk['CLASSIFICATION']>=3,chunk['CLASSIFICATION']<=5)    
+                                if np.sum(vals)>5:
+                                    chmVeg = gridding_methods.chm_alg(chunk[vals],chunk_hag[vals], maxH_hag 
+                                                                         ,cmdargs.chm_psize,xst_bin,yst_bin,binSize,nRows_chm,nCols_chm,nullVal)
+                                    chmTile[yst_chm : (yst_chm + nRows_chm), xst_chm : (xst_chm + nRows_chm)] = chmVeg
+                                                                                           
+                            ##############################
+                            # run pulse density density
+                            density = np.zeros((nRows, nCols), dtype=np.uint32)
+                            fstR = binChunk["RETURN_NUMBER"] == 1
+                            if np.sum(fstR) > 0:
+                                (row_1st, col_1st) = gridding_methods.xyToRowCol(
+                                    binChunk["X"][fstR],
+                                    binChunk["Y"][fstR],
+                                    xst_bin,
+                                    yst_bin,
+                                    cmdargs.psize,
+                                )
+                                gridding_methods.fstR_density(
+                                    row_1st,
+                                    col_1st,
+                                    binChunk["X"][fstR],
+                                    binChunk["Y"][fstR],
+                                    density,
+                                )
+                                ptDenTile[
+                                    yst : (yst + nRows), xst : (xst + nRows)
+                                ] = density
+                            ############################
+                            # run percentiles
+                            (
+                                percentile_arr,
+                                nRows_pct,
+                            ) = gridding_methods.doHeightPercentileOutputs_idx(
+                                binChunk["X"],
+                                binChunk["Y"],
+                                xst_bin,
+                                yst_bin,
+                                binSize,
+                                heightAboveGround,
+                                cmdargs.ptile_s,
+                                pptiles=percentiles,
+                                nullVal=nullVal,
+                            )
+                            xst_pct = int(int((rowB - 1) * binSize) / cmdargs.ptile_s)
+                            yst_pct = int(int((rowS - colB) * binSize) / cmdargs.ptile_s)
+                            pctTile[
+                                :,
+                                yst_pct : (yst_pct + nRows_pct),
+                                xst_pct : (xst_pct + nRows_pct),
+                            ] = percentile_arr
+
+                            ############################
+                            # run FPC
+                            xst_fpc = int(int((rowB - 1) * binSize) / cmdargs.fpc_psize)
+                            yst_fpc = int(int((rowS - colB) * binSize) / cmdargs.fpc_psize)
+                            nRows_fpc = int(np.ceil(binSize / cmdargs.fpc_psize))
+                            nCols_fpc = int(np.ceil(binSize / cmdargs.fpc_psize))
+
+                            flightlines = fpc_method.check_pts_pulses(binChunk)
+                            canopyThreshold = 1.7
+                            hag = heightAboveGround
+
+                            fpc = fpc_method.doFPC(
+                                xst_bin,
+                                yst_bin,
+                                binChunk,
+                                flightlines,
+                                hag,
+                                cmdargs.fpc_psize,
+                                binSize,
+                                cmdargs.split_fpc,
+                                canopyThreshold
+                            )
+                            fpcTile[
+                                yst_fpc : (yst_fpc + nRows_fpc),
+                                xst_fpc : (xst_fpc + nRows_fpc),
+                            ] = fpc
+                            ############################                         
+                            del chunk,binChunk,flightlines, hag
+            del bData
+                       
+            rw_image_methods.writeImage(            
+                np.round(demTile.astype(np.float32), 3),
+                outfnames["dem"],
+                cmdargs,
+                tlx=easting,
+                tly=northing,
+                binsize=cmdargs.psize,
+                epsg=cmdargs.epsg,
+                nullVal=nullVal,
+                parent_file=infileFull,
+            )            
+            rw_image_methods.writeImage(
+                np.round(csmTile.astype(np.float32), 3),
+                outfnames["csm"],
+                cmdargs,
+                tlx=easting,
+                tly=northing,
+                binsize=cmdargs.psize,
+                epsg=cmdargs.epsg,
+                nullVal=nullVal,
+                parent_file=infileFull,
+            )                                   
+            #######################     
+            ## interpolating over buildings can be a problem - msk out affected pixels here
+            multi = cmdargs.psize/cmdargs.chm_psize
+            veg_msk = (non_grTile==6)*1 + (non_grTile==9)*1 
+            veg_msk = ndimage.zoom(veg_msk, multi, order=0)
+            struct2 = ndimage.generate_binary_structure(2, 2)
+            veg_msk = ndimage.binary_dilation(veg_msk, structure=struct2) 
+            veg_msk = ndimage.binary_dilation(veg_msk, structure=struct2)            
+            chmTile[veg_msk>0]=0
+                                               
+            masked_array = np.ma.masked_equal(chmTile, 0)
+            chmTile = ndimage.median_filter(masked_array, size=3) # median filter ignoring zeros
+            chmTile[chmTile<0.5] = nullVal
+            rw_image_methods.writeImage(
+                np.round(chmTile.astype(np.float32), 3),
+                outfnames["chm"],
+                cmdargs,
+                tlx=easting,
+                tly=northing,
+                binsize=cmdargs.chm_psize,
+                epsg=cmdargs.epsg,
+                nullVal=nullVal,
+                parent_file=infileFull,
+            )            
+            #########################
+            rw_image_methods.writeImage(
+                np.round(maxhTile, 3),
+                outfnames["maxH"],
+                cmdargs,
+                tlx=easting,
+                tly=northing,
+                binsize=cmdargs.psize,
+                epsg=cmdargs.epsg,
+                nullVal=nullVal,
+                parent_file=infileFull,
+            )            
+            rw_image_methods.writeImage(
+                np.round(intensTile, 4),
+                outfnames["intens"],
+                cmdargs,
+                tlx=easting,
+                tly=northing,
+                binsize=cmdargs.psize,
+                epsg=cmdargs.epsg,
+                nullVal=nullVal,
+                parent_file=infileFull,
+            )
+            rw_image_methods.writeImage(
+                grTile,
+                outfnames["grdR"],
+                cmdargs,
+                tlx=easting,
+                tly=northing,
+                binsize=cmdargs.psize,
+                epsg=cmdargs.epsg,
+                nullVal=rtnClassNull,
+                parent_file=infileFull,
+            )
+            rw_image_methods.writeImage(
+                non_grTile,
+                outfnames["NonGrd_codes"],
+                cmdargs,
+                tlx=easting,
+                tly=northing,
+                binsize=cmdargs.psize,
+                epsg=cmdargs.epsg,
+                nullVal=rtnClassNull,
+                parent_file=infileFull,
+            )
+            rw_image_methods.writeImage(
+                ptDenTile,
+                outfnames["fst_dens"],
+                cmdargs,
+                tlx=easting,
+                tly=northing,
+                binsize=cmdargs.psize,
+                epsg=cmdargs.epsg,
+                nullVal=0,
+                parent_file=infileFull,
+            )
+            for idx, pp in enumerate(percentiles):
+                layer = pctTile[idx, :, :]
+                rw_image_methods.writeImage(
+                    layer,
+                    outfnames["ptiles"][idx],
+                    cmdargs,
+                    tlx=easting,
+                    tly=northing,
+                    binsize=cmdargs.ptile_s,
+                    epsg=cmdargs.epsg,
+                    nullVal=nullVal,
+                    parent_file=infileFull,
+                )
+            rw_image_methods.writeImage(
+                np.rint(fpcTile).astype(np.uint8),
+                outfnames["fpc"],
+                cmdargs,
+                tlx=easting,
+                tly=northing,
+                binsize=cmdargs.fpc_psize,
+                epsg=cmdargs.epsg,
+                nullVal=rtnClassNull,
+                parent_file=infileFull,
+            )
+            applyFPCcolor(outfnames["fpc"]) 
+            logger.info(f"Tiles written to file {infileFull}")
+
+            os.system("gdaldem hillshade {} {} -compute_edges".format(outfnames["dem"], outfnames["demHS"]))
+           
+            ## calculate and write out to a temporary file return,pulse,area stats while data held in memory            
+            infileFull = Path(cmdargs.indir).joinpath(infile)
+            with laspy.open(infileFull) as f:
+                nReturns = f.header.point_count
+            f.close()                       
+            dem_area = np.sum(demTile>0) 
+            nPulses = np.sum(ptDenTile)
+            
+            infileFull = Path(cmdargs.indir).joinpath(infile)
+            outfile =  Path(str(outfnames["dem"]).replace(Path(outfnames["dem"]).suffix,'_tempStats.txt'))              
+            fout = open(outfile, "w")
+            fout.write(f"fname = {infile}\n")
+            fout.write(f"nPulses = {nPulses}\n")
+            fout.write(f"nReturns = {nReturns}\n")
+            fout.write(f"DEM area (pixels) = {dem_area}\n")
+            fout.close()
+
+
+#######################################################################################################
+def reorder_flist(lazlistfull):
+    """
+    Reorder a list of LAS/LAZ files by file size in descending order.
+
+    Parameters:
+        lazlistfull (list): List of file paths to LAS/LAZ files.
+
+    Returns:
+        np.ndarray: Array of file paths sorted by file size in descending order.
+    """
+    file_sizes = [Path(ff).stat().st_size for ff in lazlistfull]
+    sorted_indices = np.argsort(-np.array(file_sizes))  # Sort in descending order
+    return np.array(lazlistfull)[sorted_indices]
+
+#######################################################################################################
+def applyFPCcolor(fout):
+    """
+    Apply a colour map to the FPC (Foliage Projective Cover) output.
+
+    Parameters:
+        fout (str): Path to the FPC output file.
+    """
+    # Create a colour table with 256 entries (RGBA format)
+    clrTbl = np.zeros((256, 4), dtype=np.uint8)
+    clrTbl.fill(255)  # Default to white with full opacity
+
+    # Define the red channel gradient
+    clrTbl[10:90, 0] = np.mgrid[255:0:-80j].round().astype(np.uint8)
+    clrTbl[90:101, 0] = 0
+
+    # Define the blue channel (same as red)
+    clrTbl[:, 2] = clrTbl[:, 0]
+
+    # Define the green channel gradient
+    clrTbl[10:90, 1] = np.mgrid[255:100:-80j].round().astype(np.uint8)
+    clrTbl[90:101, 1] = 100
+
+    # Add a brown colour for zero FPC
+    clrTbl[0, :] = [210, 180, 140, 255]
+
+    # Apply the colour table to the output file
+    rat.setColorTable(fout, clrTbl)
+
+
+def check_divisible(psizes):
+    """
+    Check if the provided pixel sizes are divisible by common factors.
+
+    Parameters:
+        psizes (list): List of pixel sizes to check.
+
+    Raises:
+        SystemExit: If any of the pixel sizes are not divisible by the expected factors.
+    """
+    pName = ["psize", "ptile_s", "fpc_psize"]
+
+    for loc, psize in enumerate(psizes):
+        if psize <= 1.0:
+            if ((1.0 / psize) - (1.0 // psize)) > 0:
+                msg = f"error: cmdargs.{pName[loc]} {psize} not divisible"
+                sys.exit(msg)
+        elif psize <= 10.0:
+            if ((10.0 / psize) - (10.0 // psize)) > 0:
+                msg = f"error: cmdargs.{pName[loc]} {psize} not divisible"
+                sys.exit(msg)
+        else:
+            if ((100.0 / psize) - (100.0 // psize)) > 0:
+                msg = f"error: cmdargs.{pName[loc]} {psize} not divisible"
+                sys.exit(msg)
+
+
+######################################################################################################
+######################################################################################################
+######################################################################################################
+
+
+def main(args=None):
+    """
+    Main entry point for the script, allowing external calls.
+
+    Parameters:
+        args (list[str], optional): Command-line parameter list. Defaults to None.
+    """
+    if args is None:
+        args = sys.argv[1:]
+
+    logger.debug("Getting command-line arguments.")
+    cmdargs = getCmdargs(args)
+    logger.debug(f"Command-line arguments: {args}")
+    logger.debug(f"Input directory: {cmdargs.indir}")
+
+    # Run the ALS tile processing
+    run_tile_products(cmdargs)
+
+
+if __name__ == "__main__":
+    main()
