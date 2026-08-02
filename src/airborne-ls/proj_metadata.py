@@ -1,9 +1,7 @@
 #!/usr/bin/env python
 
 """
-Not complete
-
-how/where to manage metadata 
+Start for managing metadata
 
 
 """
