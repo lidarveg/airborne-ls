@@ -4,17 +4,16 @@
 Purpose: Generate the product mosaics from individually processed LiDAR tiles.
 """
 
-from __future__ import division, print_function
 import argparse
 import logging
 import os
+import subprocess
 import sys
 from pathlib import Path
-import numpy as np
-from rios import rat
-from airborne_ls import filenaming_methods 
 
-import subprocess
+import numpy as np
+from airborne_ls import filenaming_methods
+from rios import rat
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -95,8 +94,10 @@ def runMerge(cmdargs):
     Main routine
     """
     
-    # read in list of las files and extract batch subset
-    infiles = [line.strip() for line in open(cmdargs.laz_flist)]
+    # read in list of las files and extract batch subset    
+    with open(cmdargs.laz_flist) as f:
+        infiles = [line.strip() for line in f]
+
     fn_dict = filenaming_methods.createTileDict(infiles[0], cmdargs.tile_s)
     project, year, zone, zone_prefix,sensor_code = (
         fn_dict["project"],
@@ -112,49 +113,50 @@ def runMerge(cmdargs):
         chm_psize= cmdargs.chm_psize       
     )
     missing_tiles = []
-    temp_output = Path(cmdargs.indir).joinpath(f'temp_output')
+    temp_output = Path(cmdargs.indir).joinpath('temp_output')
     os.makedirs(temp_output, exist_ok=True)
     for loc, outStage in enumerate(cmdargs.outStageList):
         input_layers = []
         stagec_def = filenaming_methods.get_stageDict()
         tempList = Path(temp_output) / f"temp_list{outStage}"
-        fout = open(tempList, "w")
-        
-        for fn in infiles:
-            infileFull = os.path.join(cmdargs.indir, fn)
-            outputDir = Path((infileFull).split(".")[0])
-            tileBasename = (fn).split(".")[0]
-            outputBasename = os.path.join(outputDir, tileBasename)
-            fnames = filenaming_methods.get_outfnames(
-                outputBasename,
-                psize=cmdargs.psize,
-                ptile_s=cmdargs.ptile_s,
-                fpc_psize=cmdargs.fpc_psize,
-                chm_psize=cmdargs.chm_psize,
-                pptiles=PERCENTILES,
-            )
+       
+        with open(tempList, "w") as fout:        
+            for fn in infiles:
+                infileFull = os.path.join(cmdargs.indir, fn)
+                outputDir = Path((infileFull).split(".")[0])
+                tileBasename = (fn).split(".")[0]
+                outputBasename = os.path.join(outputDir, tileBasename)
+                fnames = filenaming_methods.get_outfnames(
+                    outputBasename,
+                    psize=cmdargs.psize,
+                    ptile_s=cmdargs.ptile_s,
+                    fpc_psize=cmdargs.fpc_psize,
+                    chm_psize=cmdargs.chm_psize,
+                    pptiles=PERCENTILES,
+                )
 
-            if (stagec_def[outStage]).endswith("percentile"):
-                num = int(((stagec_def[outStage]).split("_"))[0])
-                layer = fnames["ptiles"][
-                    np.argwhere(np.array(PERCENTILES) == num)[0][0]
-                ]
-            else:
-                layer = fnames[stagec_def[outStage]]
+                if (stagec_def[outStage]).endswith("percentile"):
+                    num = int(((stagec_def[outStage]).split("_"))[0])
+                    layer = fnames["ptiles"][
+                        np.argwhere(np.array(PERCENTILES) == num)[0][0]
+                    ]
+                else:
+                    layer = fnames[stagec_def[outStage]]
 
-            if Path(layer).is_file():
-                ##### testing
-                if outStage=="bb0":
-                    infilled_demf = layer.replace('dem','dem_infilled')
-                    if Path(infilled_demf).is_file(): 
-                        layer = infilled_demf
-                #####
-                input_layers.append(layer) 
-                fout.write(f"{layer}\n") 
-                logger.info(f"File added to mosaic: {layer}")
-            else:
-                missing_tiles.append(layer)
+                if Path(layer).is_file():
+                    ##### testing
+                    if outStage=="bb0":
+                        infilled_demf = layer.replace('dem','dem_infilled')
+                        if Path(infilled_demf).is_file(): 
+                            layer = infilled_demf
+                    #####
+                    input_layers.append(layer) 
+                    fout.write(f"{layer}\n") 
+                    logger.info(f"File added to mosaic: {layer}")
+                else:
+                    missing_tiles.append(layer)
         fout.close()
+
         if len(str(year))>4:
             makeMosaicFilename = f"ap{sensor_code}dr_r{project}_y{year}_{outStage}{zone_prefix}{zone}_{psizes[outStage]}.tif"
         else:
@@ -169,7 +171,7 @@ def runMerge(cmdargs):
 
         ########## note -- to create COG with history required two files
         outf_cog = makeMosaicPathname # correct name will be used for COG
-        outf_tif = str(makeMosaicPathname).replace(Path(makeMosaicPathname).suffix,'_temp.tif')  # 
+        outf_tif = str(makeMosaicPathname).replace(Path(makeMosaicPathname).suffix,'_temp.tif')
         #########
         
         command = [
@@ -181,8 +183,12 @@ def runMerge(cmdargs):
             vrt_filename,
             str(outf_tif) 
         ]     
-
-        result = subprocess.run(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+        
+        result = subprocess.run(command,capture_output=True,text=True,check=False)
+        if result.returncode != 0:
+            msg = 'failed'
+            raise ValueError(msg)
+        
         if outStage == "bbh":
             applyFPCcolor(str(outf_tif))
 
@@ -194,13 +200,13 @@ def runMerge(cmdargs):
         vrt_filename = vrt_temp_path
                 
         ## convert to COG                                      
-        args = args = ['gdal_translate',outf_tif, outf_cog, '-of', 'COG', '-co', 'BLOCKSIZE=256', '-co', 'RESAMPLING=BILINEAR', '-co' ,'COMPRESS=DEFLATE','-co', 'BIGTIFF=YES']          
+        args = ['gdal_translate',outf_tif, outf_cog, '-of', 'COG', '-co', 'BLOCKSIZE=256', '-co', 'RESAMPLING=BILINEAR', '-co' ,'COMPRESS=DEFLATE','-co', 'BIGTIFF=YES']          
         proc = subprocess.Popen(args,  stdout=subprocess.PIPE,stderr=subprocess.PIPE)
         stdout,stderr=proc.communicate()
         if proc.returncode != 0:
             # an error happened!
-            err_msg = "%s. Code: %s" % (stderr.strip(), proc.returncode)
-            raise Exception(err_msg)           
+            err_msg = f"{stderr.strip()}. Code: {proc.returncode}"
+            raise ValueError(err_msg)           
         else:
             print(stdout)
             print(stderr)    

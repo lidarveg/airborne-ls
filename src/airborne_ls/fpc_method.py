@@ -10,9 +10,9 @@ coding of method:
 """
 
 import numpy as np
-from numba import jit
-from scipy import ndimage
 from airborne_ls import gridding_methods
+from numba import jit
+
 
 def fix_pulse_positions(data):
     """

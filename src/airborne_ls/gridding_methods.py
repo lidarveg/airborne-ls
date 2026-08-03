@@ -117,8 +117,7 @@ def runPitInfill(ny, nx, ksize, med):
     for p in range(ksize, ny - ksize, ksize):
         for q in range(ksize, nx - ksize, ksize):
             k = med[p - ksize:p + (ksize + 1), q - ksize:q + (ksize + 1)]
-            if np.sum(np.isnan(k)) < 6:
-                if k[ksize, ksize] == np.nanmin(k):
+            if np.sum(np.isnan(k)) < 6 and k[ksize, ksize] == np.nanmin(k):
                     k[ksize, ksize] = 99999.
                     med[p, q] = np.nanmin(k) + 0.01
 
@@ -132,8 +131,8 @@ def runDEM_filter(ny, nx, ksize, dem):
     dt = (dem > 0).astype(np.float32)
     kernel = circleLocs(ksize)
 
-    for p in range(0, 2 * ksize + 1):
-        for q in range(0, 2 * ksize + 1):
+    for p in range(2 * ksize + 1):
+        for q in range(2 * ksize + 1):
             if kernel[p, q]:
                 avDem[p:ny + p, q:nx + q] += dem
                 ct[p:ny + p, q:nx + q] += dt
@@ -323,9 +322,8 @@ def maxH_array(row, col, z, maxH_hag):
     numPts = len(row)
     for i in range(numPts):
         r, c = row[i], col[i]
-        if z[i] > maxH_hag[r, c]:
-            maxH_hag[r, c] = z[i]
-
+        maxH_hag[r, c] = max(maxH_hag[r, c], z[i])
+       
 ###################################################################################################################################
 @jit
 def count_fstR(row, col, density):
@@ -344,7 +342,7 @@ def count_fstR(row, col, density):
         density[row[p], col[p]] += 1
 
 ############################################################################################################
-def doHeightPercentileOutputs(x,y,xMin,yMax,heightAboveGround,tile_s,psize,pptiles=[1, 5, 25, 50, 75, 95, 99],):
+def doHeightPercentileOutputs(x,y,xMin,yMax,heightAboveGround,tile_s,psize,pptiles=(1, 5, 25, 50, 75, 95, 99),):
     """
     Generate gridded outputs of height percentiles.
 
@@ -354,7 +352,7 @@ def doHeightPercentileOutputs(x,y,xMin,yMax,heightAboveGround,tile_s,psize,pptil
         heightAboveGround: Array of height above ground values.
         tile_s: Size of the tile (assumed to be square).
         psize: Grid cell size.
-        pptiles: List of percentiles to calculate (default: [1, 5, 25, 50, 75, 95, 99]).
+        pptiles: List of percentiles to calculate (default: (1, 5, 25, 50, 75, 95, 99)).
 
     Returns:
         percentile_arr: 3D array of height percentiles for each grid cell.
@@ -387,7 +385,7 @@ def doHeightPercentileOutputs(x,y,xMin,yMax,heightAboveGround,tile_s,psize,pptil
 
     return percentile_arr
 
-def doHeightPercentileOutputs_idx(x,y,xst_bin,yst_bin,binSize,heightAboveGround,ptile_s,pptiles=[1, 5, 25, 50, 75, 95, 99],nullVal=-999.0,):
+def doHeightPercentileOutputs_idx(x,y,xst_bin,yst_bin,binSize,heightAboveGround,ptile_s,pptiles=(1, 5, 25, 50, 75, 95, 99),nullVal=-999.0,):
     """
     Generate gridded outputs of height percentiles using bin indices.
 
@@ -397,7 +395,7 @@ def doHeightPercentileOutputs_idx(x,y,xst_bin,yst_bin,binSize,heightAboveGround,
         binSize: Size of the bin (assumed to be square).
         heightAboveGround: Array of height above ground values.
         ptile_s: Grid cell size for percentiles.
-        pptiles: List of percentiles to calculate (default: [1, 5, 25, 50, 75, 95, 99]).
+        pptiles: List of percentiles to calculate (default: (1, 5, 25, 50, 75, 95, 99)).
         nullVal: Default value for grid cells with no data (default: -999.0).
 
     Returns:
@@ -473,36 +471,36 @@ def dem_infill(dem, codes, nullVal=-999.0, minElev=-4):
 
     # Identify bad values below the minimum elevation
     bad_vals = dem < minElev
-    if np.sum(bad_vals) > 3:  # Only proceed if there are enough bad values
-        if np.max(dem) > minElev:  # Ensure there are valid values to interpolate from
-            # Get valid elevation points above the minimum elevation
-            valid_indices = np.argwhere(dem > minElev)
-            yVals = valid_indices[:, 0].astype(np.float64)
-            xVals = valid_indices[:, 1].astype(np.float64)
-            zVals = dem[dem > minElev].flatten().astype(np.float64)
+    if np.sum(bad_vals) > 3 and np.max(dem) > minElev:  # Only proceed if there are enough bad values
+        # Ensure there are valid values to interpolate from
+        # Get valid elevation points above the minimum elevation
+        valid_indices = np.argwhere(dem > minElev)
+        yVals = valid_indices[:, 0].astype(np.float64)
+        xVals = valid_indices[:, 1].astype(np.float64)
+        zVals = dem[dem > minElev].flatten().astype(np.float64)
 
-            # Generate grid coordinates for interpolation
-            nRows = int(np.max([ny, nx]))
-            pxlCoords = get_grid(nRows, 0, ny, 1.0)  # Generate linear grid
+        # Generate grid coordinates for interpolation
+        nRows = int(np.max([ny, nx]))
+        pxlCoords = get_grid(nRows, 0, ny, 1.0)  # Generate linear grid
 
-            # Perform natural neighbour interpolation
-            dem2 = pynninterp.Linear(
-                xVals,
-                yVals,
-                zVals,
-                pxlCoords[0].astype(np.float64),
-                pxlCoords[1].astype(np.float64),
-            )
-            dem2 = dem2[0:ny, 0:nx]
-            dem2 = np.copy(dem2[::-1, :])  # Flip vertically
+        # Perform natural neighbour interpolation
+        dem2 = pynninterp.Linear(
+            xVals,
+            yVals,
+            zVals,
+            pxlCoords[0].astype(np.float64),
+            pxlCoords[1].astype(np.float64),
+        )
+        dem2 = dem2[0:ny, 0:nx]
+        dem2 = np.copy(dem2[::-1, :])  # Flip vertically
 
-            # Update bad values in the DEM with interpolated values
-            dem[bad_vals] = dem2[bad_vals]
+        # Update bad values in the DEM with interpolated values
+        dem[bad_vals] = dem2[bad_vals]
 
-            # Reset any areas with code 255 to the null value
-            vals = codes == 255
-            if np.sum(vals) > 0:
-                dem[vals] = nullVal
+        # Reset any areas with code 255 to the null value
+        vals = codes == 255
+        if np.sum(vals) > 0:
+            dem[vals] = nullVal
 
     # Reshape DEM back to its original shape if it was 3D
     if nz > 0:
@@ -558,33 +556,31 @@ def chm_alg(chunk, chunk_hag, maxH_hag, psize, xst_bin, yst_bin, binSize, nRows,
     # Process each height increment
     for idx, inc in enumerate(h_incs):
         vals = chunk['Z'] >= inc
-        if np.sum(vals) > 0:
-            # Process only if a significant portion of points meet the height threshold
-            if np.sum(vals) / nElems > 0.05:
-                data_sub = chunk[vals]
+        if np.sum(vals) > 0 and np.sum(vals) / nElems > 0.05:
+            data_sub = chunk[vals]
 
-                # Create a DEM tile for the current height increment
-                csm = makeDemTile(
-                    data_sub['X'],
-                    data_sub['Y'],
-                    data_sub['Z'],
-                    xst_bin,
-                    yst_bin,
-                    binSize,
-                    psize,
-                    nullVal=0,
-                    Linear=True,
-                )
+            # Create a DEM tile for the current height increment
+            csm = makeDemTile(
+                data_sub['X'],
+                data_sub['Y'],
+                data_sub['Z'],
+                xst_bin,
+                yst_bin,
+                binSize,
+                psize,
+                nullVal=0,
+                Linear=True,
+            )
 
-                # Create a mask for areas above the current height increment
-                msk = maxH_hag >= inc
-                msk = ndimage.binary_dilation(msk * 1, structure=dil_struct)
+            # Create a mask for areas above the current height increment
+            msk = maxH_hag >= inc
+            msk = ndimage.binary_dilation(msk * 1, structure=dil_struct)
 
-                # Apply the mask to the current surface model
-                csm = csm * msk
+            # Apply the mask to the current surface model
+            csm = csm * msk
 
-                # Update the output array with the maximum values
-                outarr[csm > outarr] = csm[csm > outarr]
+            # Update the output array with the maximum values
+            outarr[csm > outarr] = csm[csm > outarr]
 
     return outarr
 ###################################################################################################################################    

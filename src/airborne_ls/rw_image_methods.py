@@ -4,12 +4,11 @@
 Script for processing LAS/LAZ files using laspy and converting them to a structured numpy record array.
 """
 
-from osgeo import osr, gdal
-import os
-import struct
-from pathlib import Path
 import subprocess
+from pathlib import Path
+
 import numpy as np
+from osgeo import gdal, osr
 
 #from airborne-ls import 
 
@@ -134,8 +133,8 @@ def writeImage(
         stdout,stderr=proc.communicate()
         if proc.returncode != 0:
             # an error happened!
-            err_msg = "%s. Code: %s" % (std_err.strip(), proc.returncode)
-            raise Exception(err_msg)
+            err_msg = f"{stderr.strip()}. Code: {proc.returncode}"
+            raise ValueError(err_msg)            
         else:
             print(stdout)
             print(stderr)    
@@ -156,7 +155,7 @@ def imgH(img):
     xdim = data.RasterXSize
     ydim = data.RasterYSize
     pixel_s = info[1]
-    proj = data.GetProjection()
+    #proj = data.GetProjection()
     h = {
         "xdim": xdim,
         "ydim": ydim,
@@ -181,7 +180,8 @@ def readtxt(fn):
     """
        read comma seperated txt file 
     """
-    txt = np.array([i.strip() for i in open(fn, 'r').readlines()])
+    with open(fn) as f:
+        txt = (line.strip() for line in f)    
     col= len((txt[0]).split(','))
     row= len(txt)        
     data = np.zeros((col,row), dtype=np.float64)
@@ -196,12 +196,11 @@ def write_txt_all(data, outfile):
     if ((data.shape)[1]) >= (data.shape)[0]:
         data = np.transpose(data)
 
-    fout = open(outfile, 'w')
-        
-    for val in range(int((data.shape)[0])):  
-        res= ",".join(str(item) for item in data[val, :])
-        line_to_write = f"{res}\n"
-        fout.write(line_to_write)            
+    with open(outfile, 'w') as fout:        
+        for val in range(int((data.shape)[0])):  
+            res= ",".join(str(item) for item in data[val, :])
+            line_to_write = f"{res}\n"
+            fout.write(line_to_write)            
     fout.close()
 
 #############################################################################################

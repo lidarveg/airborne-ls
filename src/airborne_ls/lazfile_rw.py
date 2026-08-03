@@ -12,13 +12,20 @@ key activites / options:
 
 """
 
+import logging
+import os
 import struct
 import sys
-from pathlib import Path
+import zipfile
 from copy import copy
+from pathlib import Path
 
 import laspy
 import numpy as np
+from airborne_ls import filenaming_methods
+
+logger = logging.getLogger(__name__)
+
 
 ################################################################################################################
 def laspy2rec(infile):
@@ -107,7 +114,6 @@ def standardise_lasf(fn_base,outdr,data, easting, northing, tile_s, out_tile_s, 
         Returns:
             str: Status message indicating the result of the processing.
     """
-    header = data.header       
     test_divisible = tile_s % out_tile_s == 0
     
     if test_divisible:
@@ -120,7 +126,7 @@ def standardise_lasf(fn_base,outdr,data, easting, northing, tile_s, out_tile_s, 
                 easting_new = int(easting+tile_x)
         
                 pts = fn_base.split('_')
-                fn_where = "x%sys%s" % (easting_new, northing_new)
+                fn_where = f"x{easting_new}ys{northing_new}" 
                 fn_base2 = ("_").join([pts[0], fn_where, pts[2], pts[3], pts[4]])                
                 outfn = str(Path(outdr).joinpath(fn_base2))
                                 
@@ -130,7 +136,7 @@ def standardise_lasf(fn_base,outdr,data, easting, northing, tile_s, out_tile_s, 
 
                 good_indices =  ( (float(easting_new+out_tile_s-.001) > data.x)  & (float(easting_new+.001) <=  data.x) ) &\
                                 ( ((northing_new-.001) >= data.y) & ((northing_new-out_tile_s+.001) < data.y) )  &\
-                                ( (float(-10.) < data.z) &  (float(3000.) > data.z) )  &\
+                                ( (-10. < data.z) &  (3000. > data.z) )  &\
                                   (data.classification != 7)  & (data.classification != 18) & (data.classification !=64) 
                 
                 if np.sum(good_indices)>0:                                                            
@@ -148,8 +154,7 @@ def standardise_lasf(fn_base,outdr,data, easting, northing, tile_s, out_tile_s, 
                     index = ((yIdx * nbinsRow) + xIdx).astype(int)
                     nbins = int(nbinsRow * nbinsRow)
                     
-                    start = 0
-                    newLaz = []
+                    start = 0                    
                     newIdx = [0]
                     sortingIdx = []
                     ### needs speeding up..
@@ -176,7 +181,7 @@ def standardise_lasf(fn_base,outdr,data, easting, northing, tile_s, out_tile_s, 
                                         description="defines binSize chunk", record_data=binS)                    
                     new_las.vlrs.append(new_vlr)
                     #############################
-                    bin_pos = struct.pack("%sd" % (nElems), *newIdx[0:nElems])
+                    bin_pos = struct.pack(f"{nElems}d", *newIdx[0:nElems])
                     # Instantiate and store new VLR.
                     new_vlr = laspy.VLR(user_id="BIN_POS", record_id=2, \
                                         description="defines BIN_POS", record_data=bin_pos)                    
@@ -184,10 +189,11 @@ def standardise_lasf(fn_base,outdr,data, easting, northing, tile_s, out_tile_s, 
                     #####################################
                     # check nbins match tile_s
                     test_bins = int((out_tile_s / binSize)**2)
-                    try:
-                        assert test_bins==nbins, "mis-match in bin indexing"
-                    except AssertionError as err:
-                        raise err
+
+                    if test_bins != nbins:
+                        msg = ("mis-match in bin indexing")
+                        logger.error(msg)
+                        raise ValueError(msg)
                     ###################################
                     new_las.points = data2.points.copy()
                     new_las.write(outfn)          
@@ -195,21 +201,22 @@ def standardise_lasf(fn_base,outdr,data, easting, northing, tile_s, out_tile_s, 
                     # check file is not corrupted.                   
                     with laspy.open(outfn) as las:    
                         point_count = las.header.point_count
-                        xmin,ymin,zmin = las.header.min
-                        xmax,ymax,zmax = las.header.max
-                        
-                    try:
-                        assert point_count > 0, "File likely experienced wrapping: %s" % (outfn)
-                    except AssertionError as err:
-                        raise err
-                    try:
-                        assert xmin > 1, "File likely experienced wrapping: %s" % (outfn)
-                    except AssertionError as err:
-                        raise err
-                    try:
-                        assert ymax > 1, "File likely experienced wrapping: %s" % (outfn)
-                    except AssertionError as err:
-                        raise err
+                        xmin,ymin,zmin = las.header.min # noqa
+                        xmax,ymax,zmax = las.header.max # noqa
+
+                    if point_count < 1:
+                        msg = (f"File likely experienced wrapping: {outfn}")
+                        logger.error(msg)
+                        raise ValueError(msg)
+                    if xmin < 1:
+                        msg = (f"File likely experienced wrapping: {outfn}")
+                        logger.error(msg)
+                        raise ValueError(msg)
+                    if ymax < 1:
+                        msg = (f"File likely experienced wrapping: {outfn}")
+                        logger.error(msg)
+                        raise ValueError(msg)
+
                     status = 'file indexed'
                 else:                    
                     data2 = None
@@ -238,8 +245,7 @@ def read_laz_index(infile,tile_s):
     """
 
     if (Path(infile)).is_file():        
-        las = laspy.read(infile)
-        header = las.header
+        las = laspy.read(infile)        
         las_data = np.rec.fromarrays(
             [
                 las.return_num,
@@ -305,7 +311,7 @@ def read_laz_index(infile,tile_s):
 
         return binSize, nbins, newIdx, las_data
     else:        
-        msg = "File %s not found" % (infile)
+        msg = f"File {infile} not found"
         raise FileNotFoundError(msg)
 
 ##############################################################################################################################
@@ -331,16 +337,16 @@ def bin_data(indir, infile, tile_s, nbins):
 
     # Create bin names for the grid
     bin_names = [
-        f"row_{row}_col_{col}" for row in range(0, rowS + 2) for col in range(0, rowS + 2)
+        f"row_{row}_col_{col}" for row in range(rowS + 2) for col in range(rowS + 2)
     ]
     bin_names = np.array(bin_names)
-    bins = {pos: np.zeros((1)) for pos in bin_names}
+    bins = {pos: np.zeros(1) for pos in bin_names}
 
     # Construct the full path to the input file
     infileFull = Path(indir).joinpath(infile)
 
     # Parse metadata from the input file name
-    fn_dict = prod_stagecodes.createTileDict(infile, tile_s)
+    fn_dict = filenaming_methods.createTileDict(infile, tile_s)
 
     # Process neighbouring tiles
     for pos, p in enumerate(range(8)):
@@ -355,10 +361,10 @@ def bin_data(indir, infile, tile_s, nbins):
                 fn_dict["components"][4],
             )
         )
-        neighbourfile = os.path.join(indir, fn)
+        neighbourfile = Path(indir).joinpath(fn)
 
         # If the neighbouring file exists, process it
-        if os.path.exists(neighbourfile):
+        if Path(neighbourfile).exists:
             binSize, nbins, newIdx, data = read_laz_index(neighbourfile, tile_s)
             bb = bins2access[pos]
 
@@ -369,7 +375,7 @@ def bin_data(indir, infile, tile_s, nbins):
             del data
 
     # Process the main input file
-    binSize, nbins, newIdx, data = read_laz_index(infileFull, tile_s)
+    binSize, nbins, newIdx, data = read_laz_index(infileFull, tile_s) # noqa
 
     # Assign data to bins for the main tile
     ct = 0
@@ -448,60 +454,60 @@ def get_bin_indices(nbins, tile_s):
 
 ##############################################################################################################################
 ##############################################################################################################################
-def add_hag_evlr(hag_data,outf):
-    """
-    code for adding height-above-ground (hag) to evlr  
+# def add_hag_evlr(hag_data,outf):
+#     """
+#     code for adding height-above-ground (hag) to evlr  
 
-    can store as int with only cm precision required 
+#     can store as int with only cm precision required 
 
-    just dumped example for now
-    """    
-    a = [i for i in hag_data][:]
-    hag_pk = struct.pack(f"{len(hag_data)}i",*a)
+#     just dumped example for now
+#     """    
+#     a = [i for i in hag_data][:]
+#     hag_pk = struct.pack(f"{len(hag_data)}i",*a)
 
-    new_evlr = laspy.vlrs.vlr.VLR(
-                user_id="HeightAboveGround",   # Max 16 characters
-                record_id=12345,            # Unsigned short integer ID
-                description="Custom Metadata", # Max 32 characters
-                record_data=hag_pk # Must be raw bytes
-                )
+#     new_evlr = laspy.vlrs.vlr.VLR(
+#                 user_id="HeightAboveGround",   # Max 16 characters
+#                 record_id=12345,            # Unsigned short integer ID
+#                 description="Custom Metadata", # Max 32 characters
+#                 record_data=hag_pk # Must be raw bytes
+#                 )
 
-    if outlas.evlrs is None:
-        outlas.evlrs = laspy.vlrs.vlrlist.VLRList()
+#     if outlas.evlrs is None:
+#         outlas.evlrs = laspy.vlrs.vlrlist.VLRList()
 
-    outlas.evlrs.append(new_evlr)
-    outlas.write(outf)
+#     outlas.evlrs.append(new_evlr)
+#     outlas.write(outf)
 
-def read_evlr(fn):
-    """
-    test reading evlr
-    just dumped example for now
-    """
-    las = laspy.read(fn)
-    for evlr in las.evlrs:
-        print(evlr.user_id, evlr.record_id)
-        byte_data = list(evlr.record_data)
-        print(len((byte_data)))
-        print(byte_data[0:9])
+# def read_evlr(fn):
+#     """
+#     test reading evlr
+#     just dumped example for now
+#     """
+#     las = laspy.read(fn)
+#     for evlr in las.evlrs:
+#         print(evlr.user_id, evlr.record_id)
+#         byte_data = list(evlr.record_data)
+#         print(len(byte_data))
+#         print(byte_data[0:9])
 
 
-##############################################################################################################################
+# ##############################################################################################################################
 
-def pdal_convert_epsg():
-    """
-    just a placeholder for now
-    """
-    a=a
+# def pdal_convert_epsg():
+#     """
+#     just a placeholder for now
+#     """
+#     a=a
 
-##############################################################################################################################
+# ##############################################################################################################################
 
-def check_las_version(fn,outf,point_format_id=6):
-    """
-    check las verion - if not version 1.4 then convert
-    """
-    las_data = laspy.read(fn)
-    new_las = laspy.convert(las_data, point_format_id=point_format_id, file_version="1.4")
-    new_las.write(outf)
+# def check_las_version(fn,outf,point_format_id=6):
+#     """
+#     check las verion - if not version 1.4 then convert
+#     """
+#     las_data = laspy.read(fn)
+#     new_las = laspy.convert(las_data, point_format_id=point_format_id, file_version="1.4")
+#     new_las.write(outf)
 
 
 
@@ -519,20 +525,21 @@ def run_zipf(fn,laz_flist,outdr, stagecode='ba2'):
         stagecode: 
         
     """
-    # Read the list of LAS/LAZ files
-    fns = [line.strip() for line in open(laz_flist)]
+    # Read the list of LAS/LAZ files    
+    with open(laz_flist) as f:
+        fns = [line.strip() for line in f]
 
     # Change the working directory to the directory containing the laz_flist
     dr = Path(laz_flist).parent
     os.chdir(dr)
-
+    
     # Validate the provided filename
     if not fn:
         print("Error: --fn argument is required.")
         sys.exit(1)
 
-    tileBasename = Path(fn).with_suffix('')
-    tileDict = prod_stagecodes.createTileDict(fn, 1000)
+    #tileBasename = Path(fn).with_suffix('')
+    tileDict = filenaming_methods.createTileDict(fn, 1000)
 
     # Generate filenames for BA2 and BA3 zip files
     fn_out = f"ap{tileDict['instrument']}{tileDict['returntype']}_r{tileDict['project']}_{tileDict['date']}_{stagecode}{tileDict['zone_prefix']}{tileDict['zoneCode']}.zip"

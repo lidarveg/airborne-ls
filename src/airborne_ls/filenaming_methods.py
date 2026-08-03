@@ -37,12 +37,12 @@ Examples:
         `apr8dr_rmivasf_2021_bbpm6_r50cm.tif`
 """
 
+# Configure logging
 import logging
 import os
-import numpy as np
-import argparse
 
-# Configure logging
+import numpy as np
+
 logger = logging.getLogger(__name__)
 
 def get_stageDict():
@@ -181,7 +181,7 @@ def get_outfnames(
     ptile_s=5,
     fpc_psize=10,
     chm_psize=0.2,
-    pptiles=[1, 5, 25, 50, 75, 95, 99],
+    pptiles=(1, 5, 25, 50, 75, 95, 99),
 ):
     """
     Generate filenames for individually processed tiles and intermediate products.
@@ -192,7 +192,7 @@ def get_outfnames(
         ptile_s (float): Resolution for percentile tiles in metres (default: 5).
         fpc_psize (float): Resolution for FPC in metres (default: 10).
         chm_psize (float): Resolution for CHM in metres (default: 0.2).
-        pptiles (list[int]): List of percentiles to generate filenames for (default: [1, 5, 25, 50, 75, 95, 99]).
+        pptiles (list[int]): List of percentiles to generate filenames for (default: (1, 5, 25, 50, 75, 95, 99)).
 
     Returns:
         dict: A dictionary where keys are product names and values are their corresponding filenames.
@@ -277,12 +277,13 @@ def createTileDict(tile, tile_s):
     """
     # Split the tile name into components
     components = tile.split("_")
-    try:
-        assert len(components) == 5, "Number of filename components is different from expected."
-    except AssertionError as err:
-        logger.exception(f"Input {tile} error in filename components.")
-        raise err
-
+    if len(components) != 5:
+        msg = (
+              f"Input {tile} error in filename components.")
+        logger.error(msg)
+        raise ValueError(msg)
+        
+    
     # Extract components from the filename
     what = components[0]
     where = components[1]
@@ -290,20 +291,22 @@ def createTileDict(tile, tile_s):
     processing = components[3]
 
     # Validate the 'what' component
-    try:
-        assert what[:2] == "ap", "Filename sensor check failed."
-    except AssertionError as err:
-        logger.exception(f"Input {tile} error in filename components.")
-        raise err
+    if what[:2] != "ap":
+        msg = (
+            f"Filename sensor check failed."
+            f"Input {tile} error in filename components.")
+        logger.error(msg)
+        raise ValueError(msg)
 
     # Parse the project name
     project = components[4].split(".")[0]
-    try:
-        assert len(project[1:]) == 6, "Filename project name length check failed."
-    except AssertionError as err:
-        logger.exception(f"Input {tile} error in project name length != 6.")
-        raise err
-
+    if len(project[1:]) != 6:
+        msg = (
+            f"Invalid project name '{project}'. "
+            f"Expected 1 prefix character followed by 6 characters.")
+        logger.error(msg)
+        raise ValueError(msg)
+    
     # Create the tile dictionary
     tileDict = {
         "rawtilename": os.path.basename(tile),  # Original tile filename

@@ -14,16 +14,21 @@ point format from header (this should be correct) using the largest few files?
 
 """
 
+import argparse
+
+# Configure logging
+import logging
 import sys
 from pathlib import Path
+
 import laspy
 import numpy as np
-
 from airborne_ls import lazfile_rw
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
-    level=logging.ERROR, format="%(asctime)s: %(name)20s: %(levelname)10s: %(message)s"
+    level=logging.ERROR,
+    format="%(asctime)s: %(name)20s: %(levelname)10s: %(message)s"
 )
 
 def getCmdargs(inputargs):
@@ -79,8 +84,7 @@ def getCmdargs(inputargs):
             cmdargs.laz_flist = 'lazlist_auto'
             outfile = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
             with open(outfile, 'w') as fout:
-                for fn in laslist:
-                    fout.write(f"{Path(fn).name}\n")
+                fout.writelines(f"{Path(fn).name}\n" for fn in laslist)
 
         if lazlist:
             lazlist = reorder_flist(lazlist)
@@ -88,8 +92,7 @@ def getCmdargs(inputargs):
             outfile = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
             print(f"outfile: {outfile}")
             with open(outfile, 'w') as fout:
-                for fn in lazlist:
-                    fout.write(f"{Path(fn).name}\n")
+                fout.writelines(f"{Path(fn).name}\n" for fn in lazlist)
 
     infilelist = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
     print(f"infilelist: {infilelist}")
@@ -122,21 +125,20 @@ def run_las_standardisation(cmdargs):
         cmdargs (argparse.Namespace): Parsed command-line arguments.
     """
     # Check input files
-    lazlistfull, laz_check = check_input_fns(
+    lazlistfull, _ = check_input_fns(   
         cmdargs.indir, Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
-    )
+    )   
 
     # Determine the range of files to process
     if not cmdargs.stopfilenum:
         cmdargs.stopfilenum = len(lazlistfull)
-    if cmdargs.stopfilenum > len(lazlistfull):
-        cmdargs.stopfilenum = len(lazlistfull)
+    cmdargs.stopfilenum = min(cmdargs.stopfilenum, len(lazlistfull))
     lazlistfull = lazlistfull[cmdargs.startfilenum:cmdargs.stopfilenum]
 
     input_tileS = cmdargs.tile_s
 
     # Generate the filename base
-    fn_base, ba3, zone_code = get_fn_base(cmdargs)
+    fn_base, ba3, zone_code = get_fn_base(cmdargs) # noqa
 
     for fn in lazlistfull:
         print(f"Processing LAS/LAZ file: {fn}")
@@ -155,7 +157,7 @@ def run_las_standardisation(cmdargs):
         pts = fn_base.split('_')
         fn_where = f"x{easting}ys{northing}z{zone_code}"
         fn_base = "_".join([pts[0], fn_where, pts[2], pts[3], pts[4]])
-        outfn = str(Path(cmdargs.outdr).joinpath(fn_base))
+        #outfn = str(Path(cmdargs.outdr).joinpath(fn_base))
 
         # Check if tile size and bin size are divisible
         test = abs(
@@ -166,10 +168,11 @@ def run_las_standardisation(cmdargs):
             raise ValueError(f"Laz tile size and binSize are not divisible: {input_tileS} and {cmdargs.binSize}")
 
         # Run chunked LAS filtering
-        status = lazfile_rw.standardise_lasf(
+        _ = lazfile_rw.standardise_lasf(
             fn_base, cmdargs.outdr, data, easting, northing, input_tileS,
             cmdargs.out_tile_s, cmdargs.binSize, fn
-        )
+        ) 
+
         del data
 
 
@@ -220,8 +223,8 @@ def get_fn_base(cmdargs):
     # Build filename base
     fn_what = f"{cmdargs.ss}{cmdargs.ii}{cmdargs.pp}"
     fn_where = f"x{easting_ul}ys{northing_ul}"
-    fn_when = f"{cmdargs.year}_ba1{zone_prefix}{zone}_p{cmdargs.proj}.laz"
-    fn_base = "_".join([fn_what, fn_where, fn_when])
+    fn_when = f"{cmdargs.year}_ba1{zone_prefix}{zone}_p{cmdargs.proj}.laz"    
+    fn_base = f"{fn_what}_{fn_where}_{fn_when}"
     ba3 = f"{fn_what}_r{cmdargs.proj}_{cmdargs.year}_ba3{zone_prefix}{zone}.zip"
 
     return fn_base, ba3, zone_code
@@ -238,7 +241,9 @@ def check_input_fns(indir, infilelist):
     Returns:
         tuple: A tuple containing the list of valid files and a boolean indicating if all files are valid.
     """
-    filelist = [line.strip() for line in open(infilelist)]
+    with open(infilelist) as f:        
+        filelist = [line.strip() for line in f]
+        
     flist = []
     laz_count = 0
 

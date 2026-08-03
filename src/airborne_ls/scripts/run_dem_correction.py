@@ -7,14 +7,14 @@ Needs refinement / further development
 
 """
 
-import sys
-import os
-import numpy as np
 import argparse
-import subprocess
 import logging
+import subprocess
+import sys
 from pathlib import Path
-from airborne_ls import rw_image_methods, gridding_methods
+
+import numpy as np
+from airborne_ls import gridding_methods, rw_image_methods
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -55,13 +55,14 @@ def run_dem_correction(cmdargs):
         cmdargs (argparse.Namespace): Parsed command-line arguments containing input directory, file list, and processing parameters.
     """
     # Read input file list
-    infiles = [line.strip() for line in open(Path(cmdargs.indir).joinpath(cmdargs.laz_flist))]
-
+    fn = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
+    with open(fn) as f:
+        infiles = (line.strip() for line in f)
+       
     # Determine the range of files to process
     if not cmdargs.stopfilenum:
         cmdargs.stopfilenum = len(infiles)
-    if cmdargs.stopfilenum > len(infiles):
-        cmdargs.stopfilenum = len(infiles)
+    cmdargs.stopfilenum = min(cmdargs.stopfilenum, len(infiles))
 
     infiles = infiles[cmdargs.startfilenum:cmdargs.stopfilenum]
 
@@ -149,7 +150,8 @@ def run_dem_correction(cmdargs):
                 proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
                 stdout, stderr = proc.communicate()
                 if proc.returncode != 0:
-                    raise Exception(f"{stderr.strip().decode('utf-8')}. Code: {proc.returncode}")
+                    msg = f"{stderr.strip().decode('utf-8')}. Code: {proc.returncode}"
+                    raise ValueError(msg)
                 else:
                     print(stdout.decode('utf-8'))
                     print(stderr.decode('utf-8'))
@@ -187,7 +189,8 @@ def tif2cog(infile, outfile):
     stdout, stderr = proc.communicate()
 
     if proc.returncode != 0:
-        raise Exception(f"Error creating COG: {stderr.strip().decode('utf-8')}. Exit code: {proc.returncode}")
+        msg = f"Error creating COG: {stderr.strip().decode('utf-8')}. Exit code: {proc.returncode}"
+        raise ValueError(msg)
     else:
         print(stdout.decode('utf-8'))
         print(stderr.decode('utf-8'))

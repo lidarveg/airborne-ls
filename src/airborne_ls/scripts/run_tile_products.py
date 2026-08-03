@@ -19,26 +19,26 @@
 ####################################################################################################
 """
 
-from __future__ import division, print_function
 
 import argparse
+import logging
 import os
 import sys
 from pathlib import Path
+
 import laspy
 import numpy as np
-from rios import rat
-import logging
-from scipy import ndimage
 
 # ALS Modules
 from airborne_ls import (
+    filenaming_methods,
     fpc_method,
     gridding_methods,
-    filenaming_methods,
-    rw_image_methods,
     lazfile_rw,
+    rw_image_methods,
 )
+from rios import rat
+from scipy import ndimage
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -136,16 +136,14 @@ def getCmdargs(inputargs):
             laslist = reorder_flist(laslist)
             outfile = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
             with open(outfile, "w") as fout:
-                for fn in laslist:
-                    fout.write(f"{Path(fn).name}\n")
+                fout.writelines(f"{Path(fn).name}\n" for fn in laslist)
 
         # Process .laz files
         if lazlist:
             lazlist = reorder_flist(lazlist)
             outfile = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
             with open(outfile, "w") as fout:
-                for fn in lazlist:
-                    fout.write(f"{Path(fn).name}\n")
+                fout.writelines(f"{Path(fn).name}\n" for fn in lazlist)
 
     # Validate command-line inputs
     laz_flist = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
@@ -157,7 +155,8 @@ def getCmdargs(inputargs):
 
     if cmdargs.stopfilenum is None:
         if laz_flist.is_file():
-            lazlist = [line.strip() for line in open(laz_flist)]
+            with open(laz_flist) as f:
+                lazlist = (line.strip() for line in f)            
         cmdargs.stopfilenum = len(lazlist)
 
     if not cmdargs.tile_s:
@@ -173,15 +172,15 @@ def run_tile_products(cmdargs):
         cmdargs (Namespace): Parsed command-line arguments containing processing parameters.
     """
     # Check if the supplied pixel sizes are divisible
-    check = check_divisible([cmdargs.psize, cmdargs.ptile_s, cmdargs.fpc_psize])
+    _ = check_divisible([cmdargs.psize, cmdargs.ptile_s, cmdargs.fpc_psize])
 
     # Read the list of LAS/LAZ files and extract the batch subset
-    infiles = [line.strip() for line in open(Path(cmdargs.indir).joinpath(cmdargs.laz_flist))]
+    with open(Path(cmdargs.indir).joinpath(cmdargs.laz_flist)) as f:
+        infiles = (line.strip() for line in f)
 
     if not cmdargs.stopfilenum:
         cmdargs.stopfilenum = len(infiles)
-    if cmdargs.stopfilenum > len(infiles):
-        cmdargs.stopfilenum = len(infiles)
+    cmdargs.stopfilenum = min(cmdargs.stopfilenum, len(infiles))
 
     infiles = infiles[cmdargs.startfilenum:cmdargs.stopfilenum]
     nullVal = -999.0    
@@ -190,7 +189,7 @@ def run_tile_products(cmdargs):
     )
 
     # Read the first file to get bin size and number of bins
-    binSize, nbins, newIdx, data = lazfile_rw.read_laz_index(
+    binSize, nbins, _, data = lazfile_rw.read_laz_index(
         Path(cmdargs.indir).joinpath(infiles[0]), cmdargs.tile_s
     )
     del data
@@ -201,14 +200,14 @@ def run_tile_products(cmdargs):
     for infile in infiles:
         print(infile)
         infileFull = Path(cmdargs.indir).joinpath(infile)
-        try:
-            assert Path.is_file(Path(infileFull))
-        except AssertionError as err:
-            logger.exception(f"LAZ file {infileFull} not found.")
-            raise err
+        if not Path.is_file(Path(infileFull)):
+            msg = f"LAZ file {infileFull} not found."
+            logger.error(msg)
+            raise ValueError(msg)
+        
 
         # Parse metadata from the input file name
-        fn_dict = filenaming_methods.createTileDict(infile, cmdargs.tile_s)
+        #fn_dict = filenaming_methods.createTileDict(infile, cmdargs.tile_s)
 
         # Set up output directories and filenames
         outputDir = Path(infileFull).with_suffix('')
@@ -382,9 +381,11 @@ def run_tile_products(cmdargs):
                             csmTile[csmTile < -5] = np.nan
                             #######################################################################                            
                             # interp to irregular grid
-                            nonGround, groundMask = (
-                                binChunk["CLASSIFICATION"] != 2,
-                                binChunk["CLASSIFICATION"] == 2,)
+                            nonGround = binChunk["CLASSIFICATION"] != 2
+                            # , groundMask = (
+                            #     binChunk["CLASSIFICATION"] != 2,
+                            #     binChunk["CLASSIFICATION"] == 2,)
+                            
                             heightAboveGround = gridding_methods.createHeightAboveGround(
                                 nonGround,
                                 binChunk["X"],
@@ -403,7 +404,7 @@ def run_tile_products(cmdargs):
                                 cmdargs.psize,
                             )
                             pntIntensity = binChunk["INTENSITY"]
-                            pntClass = binChunk["CLASSIFICATION"]
+                            #pntClass = binChunk["CLASSIFICATION"]
                             zArr = np.zeros((nRows, nCols), dtype=np.float32) + nullVal
                             intensityAtMaxH = (
                                 np.zeros((nRows, nCols), dtype=np.int16) + nullVal
@@ -527,7 +528,7 @@ def run_tile_products(cmdargs):
                             xst_fpc = int(int((rowB - 1) * binSize) / cmdargs.fpc_psize)
                             yst_fpc = int(int((rowS - colB) * binSize) / cmdargs.fpc_psize)
                             nRows_fpc = int(np.ceil(binSize / cmdargs.fpc_psize))
-                            nCols_fpc = int(np.ceil(binSize / cmdargs.fpc_psize))
+                            #nCols_fpc = int(np.ceil(binSize / cmdargs.fpc_psize))
 
                             flightlines = fpc_method.check_pts_pulses(binChunk)
                             canopyThreshold = 1.7
@@ -693,11 +694,12 @@ def run_tile_products(cmdargs):
             
             infileFull = Path(cmdargs.indir).joinpath(infile)
             outfile =  Path(str(outfnames["dem"]).replace(Path(outfnames["dem"]).suffix,'_tempStats.txt'))              
-            fout = open(outfile, "w")
-            fout.write(f"fname = {infile}\n")
-            fout.write(f"nPulses = {nPulses}\n")
-            fout.write(f"nReturns = {nReturns}\n")
-            fout.write(f"DEM area (pixels) = {dem_area}\n")
+            
+            with open(outfile, "w") as fout:
+                fout.write(f"fname = {infile}\n")
+                fout.write(f"nPulses = {nPulses}\n")
+                fout.write(f"nReturns = {nReturns}\n")
+                fout.write(f"DEM area (pixels) = {dem_area}\n")
             fout.close()
 
 
