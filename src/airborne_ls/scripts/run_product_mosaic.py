@@ -10,10 +10,9 @@ import os
 import subprocess
 import sys
 from pathlib import Path
-
 import numpy as np
-from airborne_ls import filenaming_methods
 from rios import rat
+from airborne_ls import filenaming_methods
 
 # Configure logging
 logger = logging.getLogger(__name__)

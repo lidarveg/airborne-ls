@@ -12,8 +12,8 @@ import logging
 import subprocess
 import sys
 from pathlib import Path
-
 import numpy as np
+
 from airborne_ls import gridding_methods, rw_image_methods
 
 # Configure logging

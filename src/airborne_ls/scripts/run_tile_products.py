@@ -22,14 +22,12 @@
 
 import argparse
 import logging
-import os
+import subprocess
 import sys
 from pathlib import Path
 
 import laspy
 import numpy as np
-
-# ALS Modules
 from airborne_ls import (
     filenaming_methods,
     fpc_method,
