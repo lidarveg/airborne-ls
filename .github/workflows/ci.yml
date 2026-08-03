@@ -30,7 +30,9 @@ jobs:
       - name: Scan for secrets against baseline
         run: |
           detect-secrets scan --baseline .secrets.baseline
-          git diff --exit-code .secrets.baseline
+          # detect-secrets always rewrites "generated_at" even when results are unchanged,
+          # so ignore diffs that only touch that line to avoid false-positive CI failures.
+          git diff --exit-code -I'"generated_at"' .secrets.baseline
 
   vulnerability-scan:
     name: Vulnerability scan (bandit SAST)
