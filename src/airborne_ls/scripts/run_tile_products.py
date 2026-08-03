@@ -32,7 +32,7 @@ import logging
 from scipy import ndimage
 
 # ALS Modules
-from airborne-ls import (
+from airborne_ls import (
     fpc_method,
     gridding_methods,
     filenaming_methods,

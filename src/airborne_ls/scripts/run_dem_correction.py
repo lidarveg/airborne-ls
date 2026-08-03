@@ -14,7 +14,7 @@ import argparse
 import subprocess
 import logging
 from pathlib import Path
-from airborne-ls import rw_image_methods, gridding_methods
+from airborne_ls import rw_image_methods, gridding_methods
 
 # Configure logging
 logger = logging.getLogger(__name__)

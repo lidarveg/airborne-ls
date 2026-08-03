@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 import numpy as np
 from rios import rat
-from airborne-ls import filenaming_methods 
+from airborne_ls import filenaming_methods 
 
 import subprocess
 
