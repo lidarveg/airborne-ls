@@ -13,6 +13,7 @@ from scipy import ndimage
 # DEM Generation Functions
 # ----------------------------------------------------------------------------------------------------
 
+
 def makeDem(xVals, yVals, zVals, header, tile_s, psize, nullVal=-999.0):
     """
     Interpolate the ground returns on a regular grid to make a DEM image.
@@ -28,9 +29,11 @@ def makeDem(xVals, yVals, zVals, header, tile_s, psize, nullVal=-999.0):
     )
     dem[np.isnan(dem)] = nullVal
     return dem
-    
 
-def makeDemTile(xVals, yVals, zVals, x_min, y_max, tile_s, psize, nullVal=-999.0, Linear=False):
+
+def makeDemTile(
+    xVals, yVals, zVals, x_min, y_max, tile_s, psize, nullVal=-999.0, Linear=False
+):
     """
     Interpolate the ground returns on a regular grid to make a DEM image.
     """
@@ -62,6 +65,7 @@ def makeDemTile(xVals, yVals, zVals, x_min, y_max, tile_s, psize, nullVal=-999.0
     dem[np.isnan(dem)] = nullVal
     return dem
 
+
 def interpPoints(xVals, yVals, zVals, x_min, y_max, tile_s, psize, nullVal=-999.0):
     """
     Interpolate the ground returns on a regular grid to make a DEM image.
@@ -80,9 +84,11 @@ def interpPoints(xVals, yVals, zVals, x_min, y_max, tile_s, psize, nullVal=-999.
     dem[np.isnan(dem)] = nullVal
     return dem
 
+
 # ----------------------------------------------------------------------------------------------------
 # Grid and Coordinate Conversion Functions
 # ----------------------------------------------------------------------------------------------------
+
 
 def xyToRowCol(x, y, xMin, yMax, pixSize):
     """
@@ -109,6 +115,7 @@ def get_grid(xr, xst, yst, psize):
 # Filtering Functions
 # ----------------------------------------------------------------------------------------------------
 
+
 @jit
 def runPitInfill(ny, nx, ksize, med):
     """
@@ -116,10 +123,10 @@ def runPitInfill(ny, nx, ksize, med):
     """
     for p in range(ksize, ny - ksize, ksize):
         for q in range(ksize, nx - ksize, ksize):
-            k = med[p - ksize:p + (ksize + 1), q - ksize:q + (ksize + 1)]
+            k = med[p - ksize : p + (ksize + 1), q - ksize : q + (ksize + 1)]
             if np.sum(np.isnan(k)) < 6 and k[ksize, ksize] == np.nanmin(k):
-                    k[ksize, ksize] = 99999.
-                    med[p, q] = np.nanmin(k) + 0.01
+                k[ksize, ksize] = 99999.0
+                med[p, q] = np.nanmin(k) + 0.01
 
 
 def runDEM_filter(ny, nx, ksize, dem):
@@ -134,11 +141,11 @@ def runDEM_filter(ny, nx, ksize, dem):
     for p in range(2 * ksize + 1):
         for q in range(2 * ksize + 1):
             if kernel[p, q]:
-                avDem[p:ny + p, q:nx + q] += dem
-                ct[p:ny + p, q:nx + q] += dt
+                avDem[p : ny + p, q : nx + q] += dem
+                ct[p : ny + p, q : nx + q] += dt
 
     avDem = avDem / ct
-    avDem = avDem[ksize:(ny + ksize), ksize:(nx + ksize)]
+    avDem = avDem[ksize : (ny + ksize), ksize : (nx + ksize)]
     return avDem
 
 
@@ -146,14 +153,28 @@ def circleLocs(radius):
     """
     Generate a circular kernel for neighbourhood operations.
     """
-    y, x = np.ogrid[-radius:radius + 1, -radius:radius + 1]
+    y, x = np.ogrid[-radius : radius + 1, -radius : radius + 1]
     return x**2 + y**2 <= radius**2
+
 
 ###########################################################################################################
 @jit
-def maxH_workflow_layers(row,col,x,y,z,intensity,classi,xArr,yArr,zArr,intensityAtMaxH,nonGroundClasses,
-                        haveGroundReturn,):
-    """    
+def maxH_workflow_layers(
+    row,
+    col,
+    x,
+    y,
+    z,
+    intensity,
+    classi,
+    xArr,
+    yArr,
+    zArr,
+    intensityAtMaxH,
+    nonGroundClasses,
+    haveGroundReturn,
+):
+    """
     Compute the maximum height grid and associated x, y locations from a LiDAR point cloud as 2D arrays.
 
     Parameters:
@@ -182,6 +203,7 @@ def maxH_workflow_layers(row,col,x,y,z,intensity,classi,xArr,yArr,zArr,intensity
             haveGroundReturn[r, c] = 1
         else:
             nonGroundClasses[r, c] = np.uint(classi[i])
+
 
 @jit
 def fstR_density(row, col, x, y, density):
@@ -232,12 +254,16 @@ def createHeightAboveGround(nonGround, x, y, z, xVals, yVals, zVals):
     if nNonGrd > chunkSize:
         # Calculate the number of chunks and their indices
         nChunks = (nNonGrd // chunkSize) + 1
-        incs = np.concatenate([np.arange(0, nChunks) * chunkSize, [nNonGrd]]).astype(np.int32)
+        incs = np.concatenate([np.arange(0, nChunks) * chunkSize, [nNonGrd]]).astype(
+            np.int32
+        )
 
         # Process each chunk
         for i in range(len(incs) - 1):
             start, end = incs[i], incs[i + 1]
-            irregZ = pynninterp.NaturalNeighbourPts(xVals, yVals, zVals, xys[start:end, :])
+            irregZ = pynninterp.NaturalNeighbourPts(
+                xVals, yVals, zVals, xys[start:end, :]
+            )
             hh = ztemp[start:end] - irregZ
             hh[np.isnan(irregZ)] = 0  # Handle NaN values in interpolated ground heights
 
@@ -253,10 +279,13 @@ def createHeightAboveGround(nonGround, x, y, z, xVals, yVals, zVals):
         # Process all points in one go if the number of non-ground points is small
         irregZ = pynninterp.NaturalNeighbourPts(xVals, yVals, zVals, xys)
         ztemp[np.isnan(irregZ)] = 0.0  # Handle NaN values in non-ground heights
-        irregZ[np.isnan(irregZ)] = 0.0  # Handle NaN values in interpolated ground heights
+        irregZ[np.isnan(irregZ)] = (
+            0.0  # Handle NaN values in interpolated ground heights
+        )
         heightAboveGround[nonGround] = ztemp - irregZ
 
     return heightAboveGround
+
 
 def maxH_xyzLocs(x, y, z, psize, nullV=-999.0):
     """
@@ -305,6 +334,7 @@ def maxH_xyzLocs(x, y, z, psize, nullV=-999.0):
         maxH[valid].astype(np.float64),
     )
 
+
 @jit
 def maxH_array(row, col, z, maxH_hag):
     """
@@ -323,7 +353,8 @@ def maxH_array(row, col, z, maxH_hag):
     for i in range(numPts):
         r, c = row[i], col[i]
         maxH_hag[r, c] = max(maxH_hag[r, c], z[i])
-       
+
+
 ###################################################################################################################################
 @jit
 def count_fstR(row, col, density):
@@ -341,8 +372,18 @@ def count_fstR(row, col, density):
     for p in range(len(row)):
         density[row[p], col[p]] += 1
 
+
 ############################################################################################################
-def doHeightPercentileOutputs(x,y,xMin,yMax,heightAboveGround,tile_s,psize,pptiles=(1, 5, 25, 50, 75, 95, 99),):
+def doHeightPercentileOutputs(
+    x,
+    y,
+    xMin,
+    yMax,
+    heightAboveGround,
+    tile_s,
+    psize,
+    pptiles=(1, 5, 25, 50, 75, 95, 99),
+):
     """
     Generate gridded outputs of height percentiles.
 
@@ -379,13 +420,26 @@ def doHeightPercentileOutputs(x,y,xMin,yMax,heightAboveGround,tile_s,psize,pptil
             hgtThisCell = hgtThisRow[thisCol]
             hgtThisCell = hgtThisCell[hgtThisCell > 0.5]  # Filter heights > 0.5
 
-            if len(hgtThisCell) > 3:  # Only calculate percentiles if there are enough points
+            if (
+                len(hgtThisCell) > 3
+            ):  # Only calculate percentiles if there are enough points
                 for idx, pp in enumerate(pptiles):
                     percentile_arr[idx, r, c] = np.percentile(hgtThisCell, pp)
 
     return percentile_arr
 
-def doHeightPercentileOutputs_idx(x,y,xst_bin,yst_bin,binSize,heightAboveGround,ptile_s,pptiles=(1, 5, 25, 50, 75, 95, 99),nullVal=-999.0,):
+
+def doHeightPercentileOutputs_idx(
+    x,
+    y,
+    xst_bin,
+    yst_bin,
+    binSize,
+    heightAboveGround,
+    ptile_s,
+    pptiles=(1, 5, 25, 50, 75, 95, 99),
+    nullVal=-999.0,
+):
     """
     Generate gridded outputs of height percentiles using bin indices.
 
@@ -406,7 +460,9 @@ def doHeightPercentileOutputs_idx(x,y,xst_bin,yst_bin,binSize,heightAboveGround,
     nRows_pct = nCols_pct = int(np.ceil(binSize / ptile_s))
 
     # Initialise the percentile array with a null value
-    percentile_arr = np.full((len(pptiles), nRows_pct, nCols_pct), nullVal, dtype=np.float32)
+    percentile_arr = np.full(
+        (len(pptiles), nRows_pct, nCols_pct), nullVal, dtype=np.float32
+    )
 
     # Convert x, y coordinates to row and column indices
     row, col = xyToRowCol(x, y, xst_bin, yst_bin, ptile_s)
@@ -425,11 +481,14 @@ def doHeightPercentileOutputs_idx(x,y,xst_bin,yst_bin,binSize,heightAboveGround,
             hgtThisCell = hgtThisRow[thisCol]
             hgtThisCell = hgtThisCell[hgtThisCell > 0.5]  # Filter heights > 0.5
 
-            if len(hgtThisCell) > 3:  # Only calculate percentiles if there are enough points
+            if (
+                len(hgtThisCell) > 3
+            ):  # Only calculate percentiles if there are enough points
                 for idx, pp in enumerate(pptiles):
                     percentile_arr[idx, r, c] = np.percentile(hgtThisCell, pp)
 
     return percentile_arr, nRows_pct
+
 
 #########################################################################################################################
 def dem_infill(dem, codes, nullVal=-999.0, minElev=-4):
@@ -471,7 +530,9 @@ def dem_infill(dem, codes, nullVal=-999.0, minElev=-4):
 
     # Identify bad values below the minimum elevation
     bad_vals = dem < minElev
-    if np.sum(bad_vals) > 3 and np.max(dem) > minElev:  # Only proceed if there are enough bad values
+    if (
+        np.sum(bad_vals) > 3 and np.max(dem) > minElev
+    ):  # Only proceed if there are enough bad values
         # Ensure there are valid values to interpolate from
         # Get valid elevation points above the minimum elevation
         valid_indices = np.argwhere(dem > minElev)
@@ -507,10 +568,23 @@ def dem_infill(dem, codes, nullVal=-999.0, minElev=-4):
         dem = dem.reshape(nz, ny, nx)
 
     return dem
-    
+
+
 ###################################################################################################################################
 ## CSM
-def chm_alg(chunk, chunk_hag, maxH_hag, psize, xst_bin, yst_bin, binSize, nRows, nCols, nullVal, minH_thres=1.0):
+def chm_alg(
+    chunk,
+    chunk_hag,
+    maxH_hag,
+    psize,
+    xst_bin,
+    yst_bin,
+    binSize,
+    nRows,
+    nCols,
+    nullVal,
+    minH_thres=1.0,
+):
     """
     Modified version of the pit-free algorithm for generating a Canopy Height Model (CHM).
 
@@ -529,7 +603,7 @@ def chm_alg(chunk, chunk_hag, maxH_hag, psize, xst_bin, yst_bin, binSize, nRows,
         outarr: 2D array representing the generated CHM.
     """
     # Assign height above ground values to the 'Z' field in the chunk
-    chunk['Z'] = chunk_hag
+    chunk["Z"] = chunk_hag
 
     # Initialise the output array
     outarr = np.zeros((nRows, nCols), dtype=np.float32)
@@ -541,7 +615,7 @@ def chm_alg(chunk, chunk_hag, maxH_hag, psize, xst_bin, yst_bin, binSize, nRows,
         dil_struct = np.ones((4, 4))
 
     # Determine height increments for processing
-    max_height = np.max(chunk['Z'])
+    max_height = np.max(chunk["Z"])
     if max_height > 5.0:
         h_incs = np.arange(0, int(np.ceil(max_height / 5) * 5), 5)
     elif max_height > 1.0:
@@ -555,15 +629,15 @@ def chm_alg(chunk, chunk_hag, maxH_hag, psize, xst_bin, yst_bin, binSize, nRows,
 
     # Process each height increment
     for idx, inc in enumerate(h_incs):
-        vals = chunk['Z'] >= inc
+        vals = chunk["Z"] >= inc
         if np.sum(vals) > 0 and np.sum(vals) / nElems > 0.05:
             data_sub = chunk[vals]
 
             # Create a DEM tile for the current height increment
             csm = makeDemTile(
-                data_sub['X'],
-                data_sub['Y'],
-                data_sub['Z'],
+                data_sub["X"],
+                data_sub["Y"],
+                data_sub["Z"],
                 xst_bin,
                 yst_bin,
                 binSize,
@@ -583,5 +657,6 @@ def chm_alg(chunk, chunk_hag, maxH_hag, psize, xst_bin, yst_bin, binSize, nRows,
             outarr[csm > outarr] = csm[csm > outarr]
 
     return outarr
-###################################################################################################################################    
 
+
+###################################################################################################################################

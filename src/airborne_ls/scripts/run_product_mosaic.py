@@ -10,6 +10,7 @@ import os
 import subprocess
 import sys
 from pathlib import Path
+
 import numpy as np
 from rios import rat
 
@@ -18,8 +19,7 @@ from airborne_ls import filenaming_methods
 # Configure logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(
-    level=logging.ERROR,
-    format="%(asctime)s: %(name)20s: %(levelname)10s: %(message)s"
+    level=logging.ERROR, format="%(asctime)s: %(name)20s: %(levelname)10s: %(message)s"
 )
 
 # Constants
@@ -41,8 +41,9 @@ PRODUCT_DICT = {
     "bbh": "fpc",
     "bbi": "demHS",
     "bbm": "csm",
-    "bbn": "chm"
+    "bbn": "chm",
 }
+
 
 def getCmdargs(inputargs):
     """
@@ -56,16 +57,49 @@ def getCmdargs(inputargs):
     """
     parser = argparse.ArgumentParser(description="Generate mosaics from LiDAR tiles.")
 
-    parser.add_argument("--indir", required=True, help="Top-level directory containing input tiles.")
-    parser.add_argument("--outdr", help="Directory to write mosaics. Default is the current directory.")
-    parser.add_argument("--laz_flist", required=True, help="File containing the list of LAS/LAZ files.")
-    parser.add_argument("--tile_s", type=float, required=True, help="XY dimensions of LAS tile (metres).")
-    parser.add_argument("--psize", default=0.5, type=float, help="Pixel size of gridded DEM, Intensity, and maxH output layers (metres). Default: %(default)s.")
-    parser.add_argument("--ptile_s", default=5, type=float, help="Pixel size of percentile output layers (metres). Default: %(default)s.")
-    parser.add_argument("--fpc_psize", default=10.0, type=float, help="Pixel size of the FPC layer (metres). Default: %(default)s.")
-    parser.add_argument("--chm_psize", default=None, type=float, help="Optional: value estimated using pulse density (metres).")
-    parser.add_argument("--outStageList", help="Three-letter stage code. If blank, run all stage codes.")
-    
+    parser.add_argument(
+        "--indir", required=True, help="Top-level directory containing input tiles."
+    )
+    parser.add_argument(
+        "--outdr", help="Directory to write mosaics. Default is the current directory."
+    )
+    parser.add_argument(
+        "--laz_flist", required=True, help="File containing the list of LAS/LAZ files."
+    )
+    parser.add_argument(
+        "--tile_s",
+        type=float,
+        required=True,
+        help="XY dimensions of LAS tile (metres).",
+    )
+    parser.add_argument(
+        "--psize",
+        default=0.5,
+        type=float,
+        help="Pixel size of gridded DEM, Intensity, and maxH output layers (metres). Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--ptile_s",
+        default=5,
+        type=float,
+        help="Pixel size of percentile output layers (metres). Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--fpc_psize",
+        default=10.0,
+        type=float,
+        help="Pixel size of the FPC layer (metres). Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--chm_psize",
+        default=None,
+        type=float,
+        help="Optional: value estimated using pulse density (metres).",
+    )
+    parser.add_argument(
+        "--outStageList", help="Three-letter stage code. If blank, run all stage codes."
+    )
+
     cmdargs = parser.parse_args(inputargs)
 
     # Input checks
@@ -93,13 +127,13 @@ def runMerge(cmdargs):
     """
     Main routine
     """
-    
-    # read in list of las files and extract batch subset    
+
+    # read in list of las files and extract batch subset
     with open(cmdargs.laz_flist) as f:
         infiles = [line.strip() for line in f]
 
     fn_dict = filenaming_methods.createTileDict(infiles[0], cmdargs.tile_s)
-    project, year, zone, zone_prefix,sensor_code = (
+    project, year, zone, zone_prefix, sensor_code = (
         fn_dict["project"],
         fn_dict["date"],
         fn_dict["zoneCode"],
@@ -110,17 +144,17 @@ def runMerge(cmdargs):
         psize=cmdargs.psize,
         ptile_s=cmdargs.ptile_s,
         fpc_psize=cmdargs.fpc_psize,
-        chm_psize= cmdargs.chm_psize       
+        chm_psize=cmdargs.chm_psize,
     )
     missing_tiles = []
-    temp_output = Path(cmdargs.indir).joinpath('temp_output')
+    temp_output = Path(cmdargs.indir).joinpath("temp_output")
     os.makedirs(temp_output, exist_ok=True)
     for loc, outStage in enumerate(cmdargs.outStageList):
         input_layers = []
         stagec_def = filenaming_methods.get_stageDict()
         tempList = Path(temp_output) / f"temp_list{outStage}"
-       
-        with open(tempList, "w") as fout:        
+
+        with open(tempList, "w") as fout:
             for fn in infiles:
                 infileFull = os.path.join(cmdargs.indir, fn)
                 outputDir = Path((infileFull).split(".")[0])
@@ -145,82 +179,104 @@ def runMerge(cmdargs):
 
                 if Path(layer).is_file():
                     ##### testing
-                    if outStage=="bb0":
-                        infilled_demf = layer.replace('dem','dem_infilled')
-                        if Path(infilled_demf).is_file(): 
+                    if outStage == "bb0":
+                        infilled_demf = layer.replace("dem", "dem_infilled")
+                        if Path(infilled_demf).is_file():
                             layer = infilled_demf
                     #####
-                    input_layers.append(layer) 
-                    fout.write(f"{layer}\n") 
+                    input_layers.append(layer)
+                    fout.write(f"{layer}\n")
                     logger.info(f"File added to mosaic: {layer}")
                 else:
                     missing_tiles.append(layer)
         fout.close()
 
-        if len(str(year))>4:
+        if len(str(year)) > 4:
             makeMosaicFilename = f"ap{sensor_code}dr_r{project}_y{year}_{outStage}{zone_prefix}{zone}_{psizes[outStage]}.tif"
         else:
             makeMosaicFilename = f"ap{sensor_code}dr_r{project}_{year}_{outStage}{zone_prefix}{zone}_{psizes[outStage]}.tif"
 
         logger.info(f"Output mosaic name: {makeMosaicFilename}")
         logger.debug(f"Missing tiles in {makeMosaicFilename} include {missing_tiles}")
-                        
+
         makeMosaicPathname = Path(os.path.join(cmdargs.outdr, makeMosaicFilename))
-        vrt_filename = makeMosaicPathname.with_suffix('.vrt') 
-        
-        args = ['gdalbuildvrt', '-input_file_list',tempList,vrt_filename]          
-        proc = subprocess.Popen(args,  stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-        stdout,stderr=proc.communicate()
+        vrt_filename = makeMosaicPathname.with_suffix(".vrt")
+
+        args = ["gdalbuildvrt", "-input_file_list", tempList, vrt_filename]
+        proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = proc.communicate()
         if proc.returncode != 0:
             # an error happened!
             err_msg = f"{stderr.strip()}. Code: {proc.returncode}"
-            raise ValueError(err_msg)           
+            raise ValueError(err_msg)
         else:
             print(stdout)
-            print(stderr)  
+            print(stderr)
 
         ########## note -- to create COG with history required two files
-        outf_cog = makeMosaicPathname # correct name will be used for COG
-        outf_tif = str(makeMosaicPathname).replace(Path(makeMosaicPathname).suffix,'_temp.tif')
+        outf_cog = makeMosaicPathname  # correct name will be used for COG
+        outf_tif = str(makeMosaicPathname).replace(
+            Path(makeMosaicPathname).suffix, "_temp.tif"
+        )
         #########
-        
+
         command = [
-            "gdal_translate", 
-            "-of", "GTiff",  
-            "-co", "COMPRESS=LZW",
-            "-co", "BIGTIFF=YES",
-            "-co", "NUM_THREADS=4",
+            "gdal_translate",
+            "-of",
+            "GTiff",
+            "-co",
+            "COMPRESS=LZW",
+            "-co",
+            "BIGTIFF=YES",
+            "-co",
+            "NUM_THREADS=4",
             vrt_filename,
-            str(outf_tif) 
-        ]     
-        
-        result = subprocess.run(command,capture_output=True,text=True,check=False)
+            str(outf_tif),
+        ]
+
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
         if result.returncode != 0:
-            msg = 'failed'
+            msg = "failed"
             raise ValueError(msg)
-        
+
         if outStage == "bbh":
             applyFPCcolor(str(outf_tif))
 
-        
-        # Move vrt_filename (the VRT file) to temp folder 
+        # Move vrt_filename (the VRT file) to temp folder
         vrt_filename_basename = vrt_filename.name  # Get the filename
-        vrt_temp_path = temp_output / vrt_filename_basename  # Construct the destination path
+        vrt_temp_path = (
+            temp_output / vrt_filename_basename
+        )  # Construct the destination path
         vrt_filename.rename(vrt_temp_path)  # Move the file
         vrt_filename = vrt_temp_path
-                
-        ## convert to COG                                      
-        args = ['gdal_translate',outf_tif, outf_cog, '-of', 'COG', '-co', 'BLOCKSIZE=256', '-co', 'RESAMPLING=BILINEAR', '-co' ,'COMPRESS=DEFLATE','-co', 'BIGTIFF=YES']          
-        proc = subprocess.Popen(args,  stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-        stdout,stderr=proc.communicate()
+
+        ## convert to COG
+        args = [
+            "gdal_translate",
+            outf_tif,
+            outf_cog,
+            "-of",
+            "COG",
+            "-co",
+            "BLOCKSIZE=256",
+            "-co",
+            "RESAMPLING=BILINEAR",
+            "-co",
+            "COMPRESS=DEFLATE",
+            "-co",
+            "BIGTIFF=YES",
+        ]
+        proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = proc.communicate()
         if proc.returncode != 0:
             # an error happened!
             err_msg = f"{stderr.strip()}. Code: {proc.returncode}"
-            raise ValueError(err_msg)           
+            raise ValueError(err_msg)
         else:
             print(stdout)
-            print(stderr)    
+            print(stderr)
         Path(outf_tif).unlink()
+
 
 def applyFPCcolor(fout):
     """
@@ -256,4 +312,3 @@ def main(args=None):
 
 if __name__ == "__main__":
     main()
-

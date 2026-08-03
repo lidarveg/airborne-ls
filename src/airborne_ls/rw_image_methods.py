@@ -10,13 +10,23 @@ from pathlib import Path
 import numpy as np
 from osgeo import gdal, osr
 
-#from airborne-ls import 
+# from airborne-ls import
 
 
 ##############################################################################################################
 
+
 def writeImage(
-    image, outfile, cmdargs, driver="GTiff", tlx=0.0, tly=0.0, binsize=0.0, epsg=None, nullVal=None, parent_file = None
+    image,
+    outfile,
+    cmdargs,
+    driver="GTiff",
+    tlx=0.0,
+    tly=0.0,
+    binsize=0.0,
+    epsg=None,
+    nullVal=None,
+    parent_file=None,
 ):
     """
     Write data to a GDAL supported image file format
@@ -31,18 +41,20 @@ def writeImage(
     - nullVal: NoData value.
     - parent_file: The parent LAS file used to generate the image.
 
-    
+
     GTiff Driver Issues: When using the GTiff driver, I encountered errors due to mismatches between the file extension and the driver or due to incorrect creation options.
 
     To resolve this issue, we need to switching to the GTiff driver and ensuring that:
     The Output File Extension Matches the Driver: When using the GTiff driver, the output file should have a .tif extension, not .img.
 
     """
-    
-    if outfile.find('fpc')<0:
-        outf_cog = outfile # correct name will be used for COG
-        outfile = str(outfile).replace(Path(outfile).suffix,'_temp.tif')  # temp file ??
-      
+
+    if outfile.find("fpc") < 0:
+        outf_cog = outfile  # correct name will be used for COG
+        outfile = str(outfile).replace(
+            Path(outfile).suffix, "_temp.tif"
+        )  # temp file ??
+
     if len(image.shape) == 2:
         ny, nx = image.shape
         nz = 1
@@ -51,7 +63,7 @@ def writeImage(
     driver = gdal.GetDriverByName(driver)
     dt = image.dtype
 
-  # Map numpy dtype to GDAL data type
+    # Map numpy dtype to GDAL data type
     dtype_map = {
         "uint8": gdal.GDT_Byte,
         "int16": gdal.GDT_Int16,
@@ -74,19 +86,19 @@ def writeImage(
         ds.SetProjection(proj.ExportToWkt())
 
     # set colour table for bb4
-    if outfile.find('NonGrd_codes')>0:       
+    if outfile.find("NonGrd_codes") > 0:
         colors = gdal.ColorTable()
         # set color for each value
-        colors.SetColorEntry(0, (254, 254, 254))  # never classified: 
-        colors.SetColorEntry(1, (200, 200, 200)) # unclassified: light gray
-        colors.SetColorEntry(2, (0, 0, 0)) # ground classification
-        colors.SetColorEntry(3, (0, 240, 0)) ## low veg: green1
-        colors.SetColorEntry(4, (0, 160, 0)) ## medium veg: green2
-        colors.SetColorEntry(5, (0, 80, 0)) ## high veg: green3
-        colors.SetColorEntry(6, (255, 0, 0)) ## building: red
+        colors.SetColorEntry(0, (254, 254, 254))  # never classified:
+        colors.SetColorEntry(1, (200, 200, 200))  # unclassified: light gray
+        colors.SetColorEntry(2, (0, 0, 0))  # ground classification
+        colors.SetColorEntry(3, (0, 240, 0))  ## low veg: green1
+        colors.SetColorEntry(4, (0, 160, 0))  ## medium veg: green2
+        colors.SetColorEntry(5, (0, 80, 0))  ## high veg: green3
+        colors.SetColorEntry(6, (255, 0, 0))  ## building: red
         colors.SetColorEntry(7, (255, 255, 0))
         colors.SetColorEntry(8, (255, 255, 0))
-        colors.SetColorEntry(9, (0, 0, 255)) ## blue for water
+        colors.SetColorEntry(9, (0, 0, 255))  ## blue for water
         colors.SetColorEntry(10, (255, 0, 255))
         colors.SetColorEntry(11, (255, 20, 255))
         colors.SetColorEntry(12, (255, 30, 255))
@@ -97,24 +109,24 @@ def writeImage(
         colors.SetColorEntry(17, (255, 80, 255))
         colors.SetColorEntry(18, (255, 90, 255))
         colors.SetColorEntry(19, (255, 100, 255))
-        colors.SetColorEntry(254, (101, 67, 33)) ## brown for background  
-        
+        colors.SetColorEntry(254, (101, 67, 33))  ## brown for background
+
     if nz > 1:
         for i in range(nz):
             band = ds.GetRasterBand(i + 1)
             # set color table and color interpretation
-            if outfile.find('NonGrd_codes')>0:
+            if outfile.find("NonGrd_codes") > 0:
                 band.SetRasterColorTable(colors)
                 band.SetRasterColorInterpretation(gdal.GCI_PaletteIndex)
             band.WriteArray(image[i, :, :], 0, 0)
     else:
         band = ds.GetRasterBand(1)
         # set color table and color interpretation
-        if outfile.find('NonGrd_codes')>0:
+        if outfile.find("NonGrd_codes") > 0:
             band.SetRasterColorTable(colors)
             band.SetRasterColorInterpretation(gdal.GCI_PaletteIndex)
-        band.WriteArray(image, 0, 0)    
-        
+        band.WriteArray(image, 0, 0)
+
     # Set the null value on every band
     if nullVal is not None:
         for i in range(nz):
@@ -122,25 +134,36 @@ def writeImage(
             band.SetNoDataValue(nullVal)
 
     ds.FlushCache()
-    band = None 
+    band = None
     ds = None
-    
-    ## convert to COG ???
-    if outfile.find('fpc')<0:    
 
-        args = ['gdal_translate',outfile, outf_cog, '-of', 'COG', '-co', 'BLOCKSIZE=256', '-co', 'RESAMPLING=BILINEAR', '-co' ,'COMPRESS=DEFLATE']          
-        proc = subprocess.Popen(args,  stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-        stdout,stderr=proc.communicate()
+    ## convert to COG ???
+    if outfile.find("fpc") < 0:
+        args = [
+            "gdal_translate",
+            outfile,
+            outf_cog,
+            "-of",
+            "COG",
+            "-co",
+            "BLOCKSIZE=256",
+            "-co",
+            "RESAMPLING=BILINEAR",
+            "-co",
+            "COMPRESS=DEFLATE",
+        ]
+        proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+        stdout, stderr = proc.communicate()
         if proc.returncode != 0:
             # an error happened!
             err_msg = f"{stderr.strip()}. Code: {proc.returncode}"
-            raise ValueError(err_msg)            
+            raise ValueError(err_msg)
         else:
             print(stdout)
-            print(stderr)    
+            print(stderr)
         Path(outfile).unlink()
 
-    
+
 #############################################################################################
 # image rw
 def imgH(img):
@@ -155,7 +178,7 @@ def imgH(img):
     xdim = data.RasterXSize
     ydim = data.RasterYSize
     pixel_s = info[1]
-    #proj = data.GetProjection()
+    # proj = data.GetProjection()
     h = {
         "xdim": xdim,
         "ydim": ydim,
@@ -167,6 +190,7 @@ def imgH(img):
 
     return h
 
+
 def imgRead(infile):
     """
     read image via gdal
@@ -175,35 +199,39 @@ def imgRead(infile):
     img = oFile.GetRasterBand(1).ReadAsArray()
     return img
 
+
 #############################################################################################
 def readtxt(fn):
     """
-       read comma seperated txt file 
+    read comma seperated txt file
     """
     with open(fn) as f:
-        txt = (line.strip() for line in f)    
-    col= len((txt[0]).split(','))
-    row= len(txt)        
-    data = np.zeros((col,row), dtype=np.float64)
+        txt = (line.strip() for line in f)
+    col = len((txt[0]).split(","))
+    row = len(txt)
+    data = np.zeros((col, row), dtype=np.float64)
     for ct, row in enumerate(txt):
-        data[:, ct] = row.split(',')        
-    return (np.array(data))
+        data[:, ct] = row.split(",")
+    return np.array(data)
+
 
 def write_txt_all(data, outfile):
     """
-       write comma seperated txt file 
+    write comma seperated txt file
     """
     if ((data.shape)[1]) >= (data.shape)[0]:
         data = np.transpose(data)
 
-    with open(outfile, 'w') as fout:        
-        for val in range(int((data.shape)[0])):  
-            res= ",".join(str(item) for item in data[val, :])
+    with open(outfile, "w") as fout:
+        for val in range(int((data.shape)[0])):
+            res = ",".join(str(item) for item in data[val, :])
             line_to_write = f"{res}\n"
-            fout.write(line_to_write)            
+            fout.write(line_to_write)
     fout.close()
 
+
 #############################################################################################
+
 
 def force_header(header, tile_s):
     """
@@ -221,6 +249,7 @@ def force_header(header, tile_s):
     header.y_min = (header.y_min // tile_s) * tile_s
     header.y_max = np.ceil(header.y_max / tile_s) * tile_s
     return header
+
 
 def get_mmXYZ(x, y, z):
     """
@@ -243,7 +272,5 @@ def get_mmXYZ(x, y, z):
 
     return minX, maxX, minY, maxY, minZ, maxZ
 
+
 ##############################################################################################################################
-
-
-

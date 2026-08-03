@@ -1,18 +1,19 @@
 #!/usr/bin/env python
 
 """
-coding of method: 
+coding of method:
 
-    Fisher, A., Armston, J., Goodwin, N., Scarth, P. (2020). Modelling canopy gap probability, 
-    foliage projective cover and crown projective cover from airborne lidar metrics in Australian 
+    Fisher, A., Armston, J., Goodwin, N., Scarth, P. (2020). Modelling canopy gap probability,
+    foliage projective cover and crown projective cover from airborne lidar metrics in Australian
     forests and woodlands. Remote Sensing of Environment, 237, 111520. doi: 10.1016/j.rse.2019.111520
-    
+
 """
 
 import numpy as np
 from numba import jit
 
 from airborne_ls import gridding_methods
+
 
 def fix_pulse_positions(data):
     """
@@ -21,11 +22,12 @@ def fix_pulse_positions(data):
     """
     nElems = len(data)
     ret_diff = data["RETURN_NUMBER"][1:nElems] - data["RETURN_NUMBER"][0 : nElems - 1]
-    locs = np.argwhere(ret_diff == 1)    
+    locs = np.argwhere(ret_diff == 1)
     data["X"][locs + 1] = data["X"][locs]
     data["Y"][locs + 1] = data["Y"][locs]
-    
+
     return data
+
 
 def check_pts_pulses(las_data):
     """
@@ -39,11 +41,12 @@ def check_pts_pulses(las_data):
     if len(idx) > 0:
         st = 0
         for ct, v in enumerate(idx):
-            flightLines[st:v[0]] = ct
+            flightLines[st : v[0]] = ct
             st = v[0]
         flightLines[st:] = len(idx) + 1
 
     return flightLines
+
 
 @jit
 def fpcGridding(row, col, hgt, wgt, fpc, canopyThreshold):
@@ -53,12 +56,23 @@ def fpcGridding(row, col, hgt, wgt, fpc, canopyThreshold):
      - sum of all return weights (total weights)
     """
     w2 = np.copy(wgt)
-    w2[hgt<canopyThreshold]=0. 
-    for p in range(len(hgt)):                
+    w2[hgt < canopyThreshold] = 0.0
+    for p in range(len(hgt)):
         fpc[0, row[p], col[p]] += w2[p]
         fpc[1, row[p], col[p]] += wgt[p]
 
-def doFPC(xMin, yMax, data, flightLines, heightAboveGround, fpc_size, tile_s, split_fpc, canopyThreshold):
+
+def doFPC(
+    xMin,
+    yMax,
+    data,
+    flightLines,
+    heightAboveGround,
+    fpc_size,
+    tile_s,
+    split_fpc,
+    canopyThreshold,
+):
     """
     Calculates FPC as the proportion of weighted returns above the canopy threshold.
     FPC is calculated separately for different flight lines and combined using the mean.

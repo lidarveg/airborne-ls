@@ -14,28 +14,29 @@
 # - New sub-tile indexing has been applied to optimise memory usage.
 #
 # Note: The resolution and point density of the datasets will significantly influence processing times.
-#       The computation of the CHM is slow, will seek to optimise. 
+#       The computation of the CHM is slow, will seek to optimise.
 #
 ####################################################################################################
 """
-
 
 import argparse
 import logging
 import subprocess
 import sys
 from pathlib import Path
-from rios import rat
-from scipy import ndimage
+
 import laspy
 import numpy as np
+from rios import rat
+from scipy import ndimage
 
 from airborne_ls import (
     filenaming_methods,
     fpc_method,
     gridding_methods,
     lazfile_rw,
-    rw_image_methods)
+    rw_image_methods,
+)
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -61,12 +62,16 @@ def getCmdargs(inputargs):
     Returns:
         Namespace: Parsed command-line arguments.
     """
-    parser = argparse.ArgumentParser(description="Process .las/.laz files for standardised productions.")
+    parser = argparse.ArgumentParser(
+        description="Process .las/.laz files for standardised productions."
+    )
 
     # Input and output directories
     parser.add_argument("--indir", help="Directory containing LAS/LAZ files.")
     parser.add_argument("--laz_flist", help="List of LAS/LAZ files to be processed.")
-    parser.add_argument("--tile_s", type=float, help="XY dimensions of LAS tile in metres.")    
+    parser.add_argument(
+        "--tile_s", type=float, help="XY dimensions of LAS tile in metres."
+    )
     parser.add_argument("--epsg", type=int, help="EPSG code for map information.")
 
     # Output resolutions
@@ -74,25 +79,25 @@ def getCmdargs(inputargs):
         "--psize",
         default=0.5,
         type=float,
-        help="Pixel size of gridded DEM, Intensity, and maxH output layers (metres). Default: %(default)s."
+        help="Pixel size of gridded DEM, Intensity, and maxH output layers (metres). Default: %(default)s.",
     )
     parser.add_argument(
         "--ptile_s",
         default=5,
         type=float,
-        help="Pixel size of percentile output layers (metres). Default: %(default)s."
+        help="Pixel size of percentile output layers (metres). Default: %(default)s.",
     )
     parser.add_argument(
         "--fpc_psize",
         default=10.0,
         type=float,
-        help="Pixel size of the FPC layer (metres). Default: %(default)s."
+        help="Pixel size of the FPC layer (metres). Default: %(default)s.",
     )
     parser.add_argument(
         "--chm_psize",
         default=0.2,
         type=float,
-        help="Pixel size of the CHM layer (metres). Default: %(default)s."
+        help="Pixel size of the CHM layer (metres). Default: %(default)s.",
     )
 
     # File processing options
@@ -100,24 +105,24 @@ def getCmdargs(inputargs):
         "--startfilenum",
         default=0,
         type=int,
-        help="Position within laz_flist to start batch processing. Default: %(default)s."
+        help="Position within laz_flist to start batch processing. Default: %(default)s.",
     )
     parser.add_argument(
         "--stopfilenum",
         type=int,
-        help="Position within laz_flist to stop batch processing."
+        help="Position within laz_flist to stop batch processing.",
     )
     parser.add_argument(
         "--split_fpc",
         default=False,
         action=argparse.BooleanOptionalAction,
-        help="Split flight lines for FPC calculations."
+        help="Split flight lines for FPC calculations.",
     )
     parser.add_argument(
         "--overwrite",
         default=False,
         action=argparse.BooleanOptionalAction,
-        help="Overwrite existing layers without checking."
+        help="Overwrite existing layers without checking.",
     )
 
     cmdargs = parser.parse_args(inputargs)
@@ -153,13 +158,14 @@ def getCmdargs(inputargs):
     if cmdargs.stopfilenum is None:
         if laz_flist.is_file():
             with open(laz_flist) as f:
-                lazlist = (line.strip() for line in f)            
+                lazlist = (line.strip() for line in f)
         cmdargs.stopfilenum = len(lazlist)
 
     if not cmdargs.tile_s:
         raise AssertionError("No cmdargs.tile_s supplied.")
 
     return cmdargs
+
 
 def run_tile_products(cmdargs):
     """
@@ -179,8 +185,8 @@ def run_tile_products(cmdargs):
         cmdargs.stopfilenum = len(infiles)
     cmdargs.stopfilenum = min(cmdargs.stopfilenum, len(infiles))
 
-    infiles = infiles[cmdargs.startfilenum:cmdargs.stopfilenum]
-    nullVal = -999.0    
+    infiles = infiles[cmdargs.startfilenum : cmdargs.stopfilenum]
+    nullVal = -999.0
     neigh8 = np.array(
         [[-1, 1], [0, 1], [1, 1], [-1, 0], [1, 0], [-1, -1], [0, -1], [1, -1]]
     )
@@ -201,14 +207,13 @@ def run_tile_products(cmdargs):
             msg = f"LAZ file {infileFull} not found."
             logger.error(msg)
             raise ValueError(msg)
-        
 
         # Parse metadata from the input file name
-        #fn_dict = filenaming_methods.createTileDict(infile, cmdargs.tile_s)
+        # fn_dict = filenaming_methods.createTileDict(infile, cmdargs.tile_s)
 
         # Set up output directories and filenames
-        outputDir = Path(infileFull).with_suffix('')
-        tileBasename = Path(infile).with_suffix('')
+        outputDir = Path(infileFull).with_suffix("")
+        tileBasename = Path(infile).with_suffix("")
         outputBasename = Path(outputDir).joinpath(tileBasename)
         if not Path.is_dir(outputDir):
             Path.mkdir(outputDir)
@@ -234,22 +239,20 @@ def run_tile_products(cmdargs):
                 )
                 + nullVal
             )
-            csmTile= (
+            csmTile = (
                 np.zeros(
                     (
-                        int(cmdargs.tile_s / cmdargs.psize ),
-                        int(cmdargs.tile_s / cmdargs.psize ),
+                        int(cmdargs.tile_s / cmdargs.psize),
+                        int(cmdargs.tile_s / cmdargs.psize),
                     )
-                )                
+                )
             ) + nullVal
-            chmTile = (
-                np.zeros(
-                    (
-                        int(cmdargs.tile_s / cmdargs.chm_psize ),
-                        int(cmdargs.tile_s / cmdargs.chm_psize ),
-                    )
-                )                
-            ) #+ nullVal
+            chmTile = np.zeros(
+                (
+                    int(cmdargs.tile_s / cmdargs.chm_psize),
+                    int(cmdargs.tile_s / cmdargs.chm_psize),
+                )
+            )  # + nullVal
             maxhTile = (
                 np.zeros(
                     (
@@ -283,7 +286,7 @@ def run_tile_products(cmdargs):
                     ),
                     dtype=np.uint8,
                 )
-                + 254#rtnClassNull # testing addition of new code to infill holes
+                + 254  # rtnClassNull # testing addition of new code to infill holes
             )
             non_grTile = (
                 np.zeros(
@@ -293,7 +296,7 @@ def run_tile_products(cmdargs):
                     ),
                     dtype=np.uint8,
                 )
-                + 254 
+                + 254
             )
             pctTile = (
                 np.zeros(
@@ -324,23 +327,22 @@ def run_tile_products(cmdargs):
 
             nRows = int(np.ceil(binSize / cmdargs.psize))
             nCols = int(np.ceil(binSize / cmdargs.psize))
-                       
+
             for rowB in range(1, rowS + 1, 1):
                 for colB in range(1, rowS + 1, 1):
-     
-                    fnc = f"row_{rowB}_col_{colB}"                  
+                    fnc = f"row_{rowB}_col_{colB}"
                     binChunk = np.copy(bData[fnc])  ## reset as we don't need buffer
-                    chunk = np.copy(bData[fnc])                    
+                    chunk = np.copy(bData[fnc])
                     if len(chunk) > 10:
                         for n8 in neigh8:
                             fn = f"row_{int(rowB + n8[0])}_col_{int(colB + n8[1])}"
-                            temp8 = np.copy(bData[fn])                            
+                            temp8 = np.copy(bData[fn])
                             if (temp8.shape)[0] > 1:
-                                chunk = np.concatenate((chunk, temp8))        
-                          
+                                chunk = np.concatenate((chunk, temp8))
+
                         ## run dem
                         grdhits = chunk["CLASSIFICATION"] == 2
-                        if np.sum(grdhits)>10:
+                        if np.sum(grdhits) > 10:
                             xst_bin = easting + int((rowB - 1) * binSize)
                             yst_bin = northing - int((rowS - colB) * binSize)
                             if np.sum(grdhits) > 0:
@@ -361,7 +363,8 @@ def run_tile_products(cmdargs):
                             #######################################################################
                             ## run csm
                             xValsA, yValsA, zValsA = gridding_methods.maxH_xyzLocs(
-                                chunk["X"], chunk["Y"], chunk["Z"], cmdargs.psize)
+                                chunk["X"], chunk["Y"], chunk["Z"], cmdargs.psize
+                            )
                             csm = gridding_methods.makeDemTile(
                                 xValsA,
                                 yValsA,
@@ -376,23 +379,25 @@ def run_tile_products(cmdargs):
                             csm[dem == nullVal] = nullVal
                             csmTile[yst : (yst + nRows), xst : (xst + nRows)] = csm
                             csmTile[csmTile < -5] = np.nan
-                            #######################################################################                            
+                            #######################################################################
                             # interp to irregular grid
                             nonGround = binChunk["CLASSIFICATION"] != 2
                             # , groundMask = (
                             #     binChunk["CLASSIFICATION"] != 2,
                             #     binChunk["CLASSIFICATION"] == 2,)
-                            
-                            heightAboveGround = gridding_methods.createHeightAboveGround(
-                                nonGround,
-                                binChunk["X"],
-                                binChunk["Y"],
-                                binChunk["Z"],
-                                chunk["X"][grdhits],
-                                chunk["Y"][grdhits],
-                                chunk["Z"][grdhits],
+
+                            heightAboveGround = (
+                                gridding_methods.createHeightAboveGround(
+                                    nonGround,
+                                    binChunk["X"],
+                                    binChunk["Y"],
+                                    binChunk["Z"],
+                                    chunk["X"][grdhits],
+                                    chunk["Y"][grdhits],
+                                    chunk["Z"][grdhits],
+                                )
                             )
-               
+
                             (row, col) = gridding_methods.xyToRowCol(
                                 binChunk["X"],
                                 binChunk["Y"],
@@ -401,7 +406,7 @@ def run_tile_products(cmdargs):
                                 cmdargs.psize,
                             )
                             pntIntensity = binChunk["INTENSITY"]
-                            #pntClass = binChunk["CLASSIFICATION"]
+                            # pntClass = binChunk["CLASSIFICATION"]
                             zArr = np.zeros((nRows, nCols), dtype=np.float32) + nullVal
                             intensityAtMaxH = (
                                 np.zeros((nRows, nCols), dtype=np.int16) + nullVal
@@ -413,7 +418,7 @@ def run_tile_products(cmdargs):
                             yArr = np.zeros((nRows, nCols), dtype=np.float64) + nullVal
                             haveGroundReturn = (
                                 np.zeros((nRows, nCols), dtype=np.uint8) + 254
-                            ) #rtnClassNull
+                            )  # rtnClassNull
                             nonGroundClasses = (
                                 np.zeros((nRows, nCols), dtype=np.uint8) + 254
                             )
@@ -434,31 +439,48 @@ def run_tile_products(cmdargs):
                                 haveGroundReturn,
                             )
                             maxhTile[yst : (yst + nRows), xst : (xst + nRows)] = zArr
-                            intensTile[
-                                yst : (yst + nRows), xst : (xst + nRows)
-                            ] = intensityAtMaxH
-                            grTile[
-                                yst : (yst + nRows), xst : (xst + nRows)
-                            ] = haveGroundReturn
-                            non_grTile[
-                                yst : (yst + nRows), xst : (xst + nRows)
-                            ] = nonGroundClasses
+                            intensTile[yst : (yst + nRows), xst : (xst + nRows)] = (
+                                intensityAtMaxH
+                            )
+                            grTile[yst : (yst + nRows), xst : (xst + nRows)] = (
+                                haveGroundReturn
+                            )
+                            non_grTile[yst : (yst + nRows), xst : (xst + nRows)] = (
+                                nonGroundClasses
+                            )
 
                             ############################################################################
                             ## CREATE Canopy Height Model
-                            ## refer Khosravipour_2014 pit-free    
-                            number_veg_rets = np.sum(binChunk['CLASSIFICATION']==4) +\
-                                              np.sum(binChunk['CLASSIFICATION']==5)  # could drop / add classification value of 3
-                            if number_veg_rets>10:
-                                (row_chm, col_chm) = gridding_methods.xyToRowCol(binChunk["X"],binChunk["Y"],xst_bin,yst_bin,cmdargs.chm_psize )                                
-                                nRows_chm = int(np.ceil(binSize / cmdargs.chm_psize ))
-                                nCols_chm = int(np.ceil(binSize / cmdargs.chm_psize ))
-                                xst_chm = int(int((rowB - 1) * binSize) / cmdargs.chm_psize )
-                                yst_chm = int(int((rowS - colB) * binSize) / cmdargs.chm_psize )
-                                                                
-                                maxH_hag = np.zeros((nRows_chm, nCols_chm)) + nullVal                            
-                                gridding_methods.maxH_array(row_chm, col_chm, heightAboveGround, maxH_hag)                                                                                   
-                                maxH_vals = chunk['CLASSIFICATION'] <= 5 # this includes unclassified returns.. not sure of zero?
+                            ## refer Khosravipour_2014 pit-free
+                            number_veg_rets = np.sum(
+                                binChunk["CLASSIFICATION"] == 4
+                            ) + np.sum(
+                                binChunk["CLASSIFICATION"] == 5
+                            )  # could drop / add classification value of 3
+                            if number_veg_rets > 10:
+                                (row_chm, col_chm) = gridding_methods.xyToRowCol(
+                                    binChunk["X"],
+                                    binChunk["Y"],
+                                    xst_bin,
+                                    yst_bin,
+                                    cmdargs.chm_psize,
+                                )
+                                nRows_chm = int(np.ceil(binSize / cmdargs.chm_psize))
+                                nCols_chm = int(np.ceil(binSize / cmdargs.chm_psize))
+                                xst_chm = int(
+                                    int((rowB - 1) * binSize) / cmdargs.chm_psize
+                                )
+                                yst_chm = int(
+                                    int((rowS - colB) * binSize) / cmdargs.chm_psize
+                                )
+
+                                maxH_hag = np.zeros((nRows_chm, nCols_chm)) + nullVal
+                                gridding_methods.maxH_array(
+                                    row_chm, col_chm, heightAboveGround, maxH_hag
+                                )
+                                maxH_vals = (
+                                    chunk["CLASSIFICATION"] <= 5
+                                )  # this includes unclassified returns.. not sure of zero?
                                 chunk_hag = gridding_methods.createHeightAboveGround(
                                     maxH_vals,
                                     chunk["X"],
@@ -467,13 +489,29 @@ def run_tile_products(cmdargs):
                                     chunk["X"][grdhits],
                                     chunk["Y"][grdhits],
                                     chunk["Z"][grdhits],
-                                    )                      
-                                vals=np.logical_and(chunk['CLASSIFICATION']>=3,chunk['CLASSIFICATION']<=5)    
-                                if np.sum(vals)>5:
-                                    chmVeg = gridding_methods.chm_alg(chunk[vals],chunk_hag[vals], maxH_hag 
-                                                                         ,cmdargs.chm_psize,xst_bin,yst_bin,binSize,nRows_chm,nCols_chm,nullVal)
-                                    chmTile[yst_chm : (yst_chm + nRows_chm), xst_chm : (xst_chm + nRows_chm)] = chmVeg
-                                                                                           
+                                )
+                                vals = np.logical_and(
+                                    chunk["CLASSIFICATION"] >= 3,
+                                    chunk["CLASSIFICATION"] <= 5,
+                                )
+                                if np.sum(vals) > 5:
+                                    chmVeg = gridding_methods.chm_alg(
+                                        chunk[vals],
+                                        chunk_hag[vals],
+                                        maxH_hag,
+                                        cmdargs.chm_psize,
+                                        xst_bin,
+                                        yst_bin,
+                                        binSize,
+                                        nRows_chm,
+                                        nCols_chm,
+                                        nullVal,
+                                    )
+                                    chmTile[
+                                        yst_chm : (yst_chm + nRows_chm),
+                                        xst_chm : (xst_chm + nRows_chm),
+                                    ] = chmVeg
+
                             ##############################
                             # run pulse density density
                             density = np.zeros((nRows, nCols), dtype=np.uint32)
@@ -493,9 +531,9 @@ def run_tile_products(cmdargs):
                                     binChunk["Y"][fstR],
                                     density,
                                 )
-                                ptDenTile[
-                                    yst : (yst + nRows), xst : (xst + nRows)
-                                ] = density
+                                ptDenTile[yst : (yst + nRows), xst : (xst + nRows)] = (
+                                    density
+                                )
                             ############################
                             # run percentiles
                             (
@@ -513,7 +551,9 @@ def run_tile_products(cmdargs):
                                 nullVal=nullVal,
                             )
                             xst_pct = int(int((rowB - 1) * binSize) / cmdargs.ptile_s)
-                            yst_pct = int(int((rowS - colB) * binSize) / cmdargs.ptile_s)
+                            yst_pct = int(
+                                int((rowS - colB) * binSize) / cmdargs.ptile_s
+                            )
                             pctTile[
                                 :,
                                 yst_pct : (yst_pct + nRows_pct),
@@ -523,9 +563,11 @@ def run_tile_products(cmdargs):
                             ############################
                             # run FPC
                             xst_fpc = int(int((rowB - 1) * binSize) / cmdargs.fpc_psize)
-                            yst_fpc = int(int((rowS - colB) * binSize) / cmdargs.fpc_psize)
+                            yst_fpc = int(
+                                int((rowS - colB) * binSize) / cmdargs.fpc_psize
+                            )
                             nRows_fpc = int(np.ceil(binSize / cmdargs.fpc_psize))
-                            #nCols_fpc = int(np.ceil(binSize / cmdargs.fpc_psize))
+                            # nCols_fpc = int(np.ceil(binSize / cmdargs.fpc_psize))
 
                             flightlines = fpc_method.check_pts_pulses(binChunk)
                             canopyThreshold = 1.7
@@ -540,17 +582,17 @@ def run_tile_products(cmdargs):
                                 cmdargs.fpc_psize,
                                 binSize,
                                 cmdargs.split_fpc,
-                                canopyThreshold
+                                canopyThreshold,
                             )
                             fpcTile[
                                 yst_fpc : (yst_fpc + nRows_fpc),
                                 xst_fpc : (xst_fpc + nRows_fpc),
                             ] = fpc
-                            ############################                         
-                            del chunk,binChunk,flightlines, hag
+                            ############################
+                            del chunk, binChunk, flightlines, hag
             del bData
-                       
-            rw_image_methods.writeImage(            
+
+            rw_image_methods.writeImage(
                 np.round(demTile.astype(np.float32), 3),
                 outfnames["dem"],
                 cmdargs,
@@ -560,7 +602,7 @@ def run_tile_products(cmdargs):
                 epsg=cmdargs.epsg,
                 nullVal=nullVal,
                 parent_file=infileFull,
-            )            
+            )
             rw_image_methods.writeImage(
                 np.round(csmTile.astype(np.float32), 3),
                 outfnames["csm"],
@@ -571,20 +613,22 @@ def run_tile_products(cmdargs):
                 epsg=cmdargs.epsg,
                 nullVal=nullVal,
                 parent_file=infileFull,
-            )                                   
-            #######################     
+            )
+            #######################
             ## interpolating over buildings can be a problem - msk out affected pixels here
-            multi = cmdargs.psize/cmdargs.chm_psize
-            veg_msk = (non_grTile==6)*1 + (non_grTile==9)*1 
+            multi = cmdargs.psize / cmdargs.chm_psize
+            veg_msk = (non_grTile == 6) * 1 + (non_grTile == 9) * 1
             veg_msk = ndimage.zoom(veg_msk, multi, order=0)
             struct2 = ndimage.generate_binary_structure(2, 2)
-            veg_msk = ndimage.binary_dilation(veg_msk, structure=struct2) 
-            veg_msk = ndimage.binary_dilation(veg_msk, structure=struct2)            
-            chmTile[veg_msk>0]=0
-                                               
+            veg_msk = ndimage.binary_dilation(veg_msk, structure=struct2)
+            veg_msk = ndimage.binary_dilation(veg_msk, structure=struct2)
+            chmTile[veg_msk > 0] = 0
+
             masked_array = np.ma.masked_equal(chmTile, 0)
-            chmTile = ndimage.median_filter(masked_array, size=3) # median filter ignoring zeros
-            chmTile[chmTile<0.5] = nullVal
+            chmTile = ndimage.median_filter(
+                masked_array, size=3
+            )  # median filter ignoring zeros
+            chmTile[chmTile < 0.5] = nullVal
             rw_image_methods.writeImage(
                 np.round(chmTile.astype(np.float32), 3),
                 outfnames["chm"],
@@ -595,7 +639,7 @@ def run_tile_products(cmdargs):
                 epsg=cmdargs.epsg,
                 nullVal=nullVal,
                 parent_file=infileFull,
-            )            
+            )
             #########################
             rw_image_methods.writeImage(
                 np.round(maxhTile, 3),
@@ -607,7 +651,7 @@ def run_tile_products(cmdargs):
                 epsg=cmdargs.epsg,
                 nullVal=nullVal,
                 parent_file=infileFull,
-            )            
+            )
             rw_image_methods.writeImage(
                 np.round(intensTile, 4),
                 outfnames["intens"],
@@ -676,33 +720,43 @@ def run_tile_products(cmdargs):
                 nullVal=rtnClassNull,
                 parent_file=infileFull,
             )
-            applyFPCcolor(outfnames["fpc"]) 
+            applyFPCcolor(outfnames["fpc"])
             logger.info(f"Tiles written to file {infileFull}")
 
-            args = ['gdaldem', 'hillshade',outfnames["dem"],outfnames["demHS"],'-compute_edges']          
-            proc = subprocess.Popen(args,  stdout=subprocess.PIPE,stderr=subprocess.PIPE)
-            stdout,stderr=proc.communicate()
+            args = [
+                "gdaldem",
+                "hillshade",
+                outfnames["dem"],
+                outfnames["demHS"],
+                "-compute_edges",
+            ]
+            proc = subprocess.Popen(
+                args, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
+            stdout, stderr = proc.communicate()
             if proc.returncode != 0:
                 # an error happened!
                 err_msg = f"{stderr.strip()}. Code: {proc.returncode}"
-                raise ValueError(err_msg)           
+                raise ValueError(err_msg)
             else:
                 print(stdout)
-                print(stderr)  
+                print(stderr)
 
-
-            
-            ## calculate and write out to a temporary file return,pulse,area stats while data held in memory            
+            ## calculate and write out to a temporary file return,pulse,area stats while data held in memory
             infileFull = Path(cmdargs.indir).joinpath(infile)
             with laspy.open(infileFull) as f:
                 nReturns = f.header.point_count
-            f.close()                       
-            dem_area = np.sum(demTile>0) 
+            f.close()
+            dem_area = np.sum(demTile > 0)
             nPulses = np.sum(ptDenTile)
-            
+
             infileFull = Path(cmdargs.indir).joinpath(infile)
-            outfile =  Path(str(outfnames["dem"]).replace(Path(outfnames["dem"]).suffix,'_tempStats.txt'))              
-            
+            outfile = Path(
+                str(outfnames["dem"]).replace(
+                    Path(outfnames["dem"]).suffix, "_tempStats.txt"
+                )
+            )
+
             with open(outfile, "w") as fout:
                 fout.write(f"fname = {infile}\n")
                 fout.write(f"nPulses = {nPulses}\n")
@@ -725,6 +779,7 @@ def reorder_flist(lazlistfull):
     file_sizes = [Path(ff).stat().st_size for ff in lazlistfull]
     sorted_indices = np.argsort(-np.array(file_sizes))  # Sort in descending order
     return np.array(lazlistfull)[sorted_indices]
+
 
 #######################################################################################################
 def applyFPCcolor(fout):

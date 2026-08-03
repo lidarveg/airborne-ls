@@ -12,6 +12,7 @@ import logging
 import subprocess
 import sys
 from pathlib import Path
+
 import numpy as np
 
 from airborne_ls import gridding_methods, rw_image_methods
@@ -19,8 +20,7 @@ from airborne_ls import gridding_methods, rw_image_methods
 # Configure logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(
-    level=logging.ERROR,
-    format="%(asctime)s: %(name)20s: %(levelname)10s: %(message)s"
+    level=logging.ERROR, format="%(asctime)s: %(name)20s: %(levelname)10s: %(message)s"
 )
 
 
@@ -36,14 +36,39 @@ def getCmdargs(inputargs):
     """
     parser = argparse.ArgumentParser(description="Batch processing for LAS files.")
 
-    parser.add_argument("--indir", required=True, help="Directory containing LAS files.")
-    parser.add_argument("--laz_flist", required=True, help="List of LAS files to be processed.")
-    parser.add_argument("--epsg", type=int, required=True, help="EPSG code for map information.")
-    parser.add_argument("--psize", default=0.5, type=float, help="Pixel size of gridded DEM, Intensity, and maxH output layers (metres). Default: %(default)s.")
-    parser.add_argument("--tile_s", type=float, required=True, help="XY dimensions of LAS tile in metres.")
-    parser.add_argument("--startfilenum", default=0, type=int, help="Position within laz_flist to start batch processing. Default: %(default)s.")
-    parser.add_argument("--stopfilenum", type=int, help="Position within laz_flist to stop batch processing.")
-    
+    parser.add_argument(
+        "--indir", required=True, help="Directory containing LAS files."
+    )
+    parser.add_argument(
+        "--laz_flist", required=True, help="List of LAS files to be processed."
+    )
+    parser.add_argument(
+        "--epsg", type=int, required=True, help="EPSG code for map information."
+    )
+    parser.add_argument(
+        "--psize",
+        default=0.5,
+        type=float,
+        help="Pixel size of gridded DEM, Intensity, and maxH output layers (metres). Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--tile_s",
+        type=float,
+        required=True,
+        help="XY dimensions of LAS tile in metres.",
+    )
+    parser.add_argument(
+        "--startfilenum",
+        default=0,
+        type=int,
+        help="Position within laz_flist to start batch processing. Default: %(default)s.",
+    )
+    parser.add_argument(
+        "--stopfilenum",
+        type=int,
+        help="Position within laz_flist to stop batch processing.",
+    )
+
     return parser.parse_args(inputargs)
 
 
@@ -58,13 +83,13 @@ def run_dem_correction(cmdargs):
     fn = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
     with open(fn) as f:
         infiles = (line.strip() for line in f)
-       
+
     # Determine the range of files to process
     if not cmdargs.stopfilenum:
         cmdargs.stopfilenum = len(infiles)
     cmdargs.stopfilenum = min(cmdargs.stopfilenum, len(infiles))
 
-    infiles = infiles[cmdargs.startfilenum:cmdargs.stopfilenum]
+    infiles = infiles[cmdargs.startfilenum : cmdargs.stopfilenum]
 
     # Set constants
     nullVal = -999.0
@@ -76,7 +101,7 @@ def run_dem_correction(cmdargs):
     # Process each file
     for fn in infiles:
         infileFull = Path(cmdargs.indir).joinpath(fn)
-        base = fn.replace('.laz', '')
+        base = fn.replace(".laz", "")
         demf = f"{cmdargs.indir}/{base}/{base}_bb0_dem_{resolution}.tif"
         img = rw_image_methods.imgRead(demf)
 
@@ -89,8 +114,10 @@ def run_dem_correction(cmdargs):
 
             # Initialise temporary arrays for DEM and codes
             temp_dem = np.zeros((img_size_pixels * multi, img_size_pixels * multi))
-            temp_bd4 = np.zeros((img_size_pixels * multi, img_size_pixels * multi), dtype=np.uint8)
-            where = (fn.split('_'))[1]
+            temp_bd4 = np.zeros(
+                (img_size_pixels * multi, img_size_pixels * multi), dtype=np.uint8
+            )
+            where = (fn.split("_"))[1]
             sImgCount = 0
 
             # Process neighbouring tiles
@@ -104,17 +131,28 @@ def run_dem_correction(cmdargs):
 
                     if Path.is_file(Path(offsetF)):
                         img_bb0 = rw_image_methods.imgRead(offsetF)
-                        img_bb4 = rw_image_methods.imgRead(offsetF.replace('dem', 'NonGrd_codes').replace('bb0', 'bb4'))
+                        img_bb4 = rw_image_methods.imgRead(
+                            offsetF.replace("dem", "NonGrd_codes").replace("bb0", "bb4")
+                        )
                         ys = int(ct1 * img_size_pixels)
                         xs = int(ct2 * img_size_pixels)
-                        temp_dem[ys:ys + img_size_pixels, xs:xs + img_size_pixels] = img_bb0
-                        temp_bd4[ys:ys + img_size_pixels, xs:xs + img_size_pixels] = img_bb4
+                        temp_dem[
+                            ys : ys + img_size_pixels, xs : xs + img_size_pixels
+                        ] = img_bb0
+                        temp_bd4[
+                            ys : ys + img_size_pixels, xs : xs + img_size_pixels
+                        ] = img_bb4
                         sImgCount += 1
 
             # Perform DEM infill if enough neighbouring tiles are available
             if sImgCount > 5:
-                res = gridding_methods.dem_infill(temp_dem, temp_bd4, minElev=realD_thres)
-                res = res[img_size_pixels:2 * img_size_pixels, img_size_pixels:2 * img_size_pixels]
+                res = gridding_methods.dem_infill(
+                    temp_dem, temp_bd4, minElev=realD_thres
+                )
+                res = res[
+                    img_size_pixels : 2 * img_size_pixels,
+                    img_size_pixels : 2 * img_size_pixels,
+                ]
 
                 # Replace NaN values with the null value
                 res[np.isnan(res)] = nullVal
@@ -123,9 +161,9 @@ def run_dem_correction(cmdargs):
 
             # Save the infilled DEM if it contains valid data
             if np.max(res) > realD_thres:
-                outf_fn = demf.replace('dem', 'dem_infilled')
+                outf_fn = demf.replace("dem", "dem_infilled")
                 outf_cog = outf_fn
-                outfile = str(outf_fn).replace(Path(outf_fn).suffix, '_temp.tif')
+                outfile = str(outf_fn).replace(Path(outf_fn).suffix, "_temp.tif")
                 h = rw_image_methods.imgH(demf)
                 res[res < realD_thres] = nullVal
 
@@ -133,9 +171,9 @@ def run_dem_correction(cmdargs):
                     np.round(res.astype(np.float32), 3),
                     outfile,
                     cmdargs,
-                    tlx=h['tlx'],
-                    tly=h['tly'],
-                    binsize=h['pixel_s'],
+                    tlx=h["tlx"],
+                    tly=h["tly"],
+                    binsize=h["pixel_s"],
                     epsg=cmdargs.epsg,
                     nullVal=nullVal,
                     parent_file=infileFull,
@@ -144,17 +182,19 @@ def run_dem_correction(cmdargs):
 
                 # Recreate hillshade
                 demHS_cog = f"{cmdargs.indir}/{base}/{base}_bbi_demHS_{resolution}.tif"
-                outfile_HS = str(demHS_cog).replace(Path(demHS_cog).suffix, '_temp.tif')
+                outfile_HS = str(demHS_cog).replace(Path(demHS_cog).suffix, "_temp.tif")
 
-                args = ['gdaldem', 'hillshade', outfile, outfile_HS, '-compute_edges']
-                proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+                args = ["gdaldem", "hillshade", outfile, outfile_HS, "-compute_edges"]
+                proc = subprocess.Popen(
+                    args, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+                )
                 stdout, stderr = proc.communicate()
                 if proc.returncode != 0:
                     msg = f"{stderr.strip().decode('utf-8')}. Code: {proc.returncode}"
                     raise ValueError(msg)
                 else:
-                    print(stdout.decode('utf-8'))
-                    print(stderr.decode('utf-8'))
+                    print(stdout.decode("utf-8"))
+                    print(stderr.decode("utf-8"))
 
                 tif2cog(outfile_HS, demHS_cog)
 
@@ -178,11 +218,17 @@ def tif2cog(infile, outfile):
         Exception: If the gdal_translate command fails.
     """
     args = [
-        'gdal_translate', infile, outfile,
-        '-of', 'COG',
-        '-co', 'BLOCKSIZE=256',
-        '-co', 'RESAMPLING=BILINEAR',
-        '-co', 'COMPRESS=DEFLATE'
+        "gdal_translate",
+        infile,
+        outfile,
+        "-of",
+        "COG",
+        "-co",
+        "BLOCKSIZE=256",
+        "-co",
+        "RESAMPLING=BILINEAR",
+        "-co",
+        "COMPRESS=DEFLATE",
     ]
 
     proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
@@ -192,8 +238,8 @@ def tif2cog(infile, outfile):
         msg = f"Error creating COG: {stderr.strip().decode('utf-8')}. Exit code: {proc.returncode}"
         raise ValueError(msg)
     else:
-        print(stdout.decode('utf-8'))
-        print(stderr.decode('utf-8'))
+        print(stdout.decode("utf-8"))
+        print(stderr.decode("utf-8"))
 
     return "COG created successfully."
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 """
-management of file naming - but probably will be superceded? 
+management of file naming - but probably will be superceded?
 
 File Naming Structure:
     <what>_<where>_<when>_<processing>[_optional][.suffix]
@@ -45,6 +45,7 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
+
 def get_stageDict():
     """
     Returns a dictionary mapping stage codes to product descriptions.
@@ -81,16 +82,17 @@ def get_stageDict():
 
     return productDict
 
+
 def get_recordID_Dict():
     recordID_Dict = {
         "run_lidar_standardisation": 998,
-        #"???": 999,
+        # "???": 999,
         "bb0": 1000,
         "bb1": 1001,
         "bb2": 1002,
         "bb3": 1003,
-        "bb4": 1004,  
-        "bb5": 1005,  
+        "bb4": 1004,
+        "bb5": 1005,
         "bb8": 1006,
         "bb9": 1007,
         "bba": 1008,
@@ -107,11 +109,12 @@ def get_recordID_Dict():
         # "bbs": 1019,
         # "bbt": 1020,
         # "bbu": 1021,
-        # "bbv": 1022,        
-        "bbn": 2024
+        # "bbv": 1022,
+        "bbn": 2024,
     }
 
     return recordID_Dict
+
 
 def get_psizeDict(psize=0.5, ptile_s=5, fpc_psize=10, chm_psize=0.2):
     """
@@ -199,9 +202,13 @@ def get_outfnames(
     """
     # Convert resolutions to appropriate string formats
     psize = f"r{int(psize * 100)}cm" if psize < 10 else f"r{int(psize)}m"
-    chm_psize = f"r{int(chm_psize * 100)}cm" if chm_psize < 10 else f"r{int(chm_psize)}m"
+    chm_psize = (
+        f"r{int(chm_psize * 100)}cm" if chm_psize < 10 else f"r{int(chm_psize)}m"
+    )
     ptile_s = f"r{int(ptile_s * 100)}cm" if ptile_s < 10 else f"r{int(ptile_s)}m"
-    fpc_psize = f"r{int(fpc_psize * 100)}cm" if fpc_psize < 10 else f"r{int(fpc_psize)}m"
+    fpc_psize = (
+        f"r{int(fpc_psize * 100)}cm" if fpc_psize < 10 else f"r{int(fpc_psize)}m"
+    )
 
     # Get product stage codes and reverse the dictionary for lookup
     productDict = get_stageDict()
@@ -211,14 +218,14 @@ def get_outfnames(
 
     # List of product names for which to generate filenames
     products_with_psize = [
-        'grdR',
-        'intens',
-        'NonGrd_codes',
-        'dem',
-        'demHS',
-        'maxH',
-        'csm',
-        'fst_dens',
+        "grdR",
+        "intens",
+        "NonGrd_codes",
+        "dem",
+        "demHS",
+        "maxH",
+        "csm",
+        "fst_dens",
     ]
 
     # Generate filenames for products with psize
@@ -228,10 +235,12 @@ def get_outfnames(
             print(f"Processing code not found for product '{product_name}'")
             continue
 
-        fnames[product_name] = f"{outputBasename}_{processing_code}_{product_name}_{psize}.tif"
+        fnames[product_name] = (
+            f"{outputBasename}_{processing_code}_{product_name}_{psize}.tif"
+        )
 
     # Handle percentile tiles
-    fnames['ptiles'] = {}
+    fnames["ptiles"] = {}
     for pos, pptile in enumerate(pptiles):
         product_name = f"{pptile}_percentile"
         processing_code = productNameToCode.get(product_name)
@@ -239,23 +248,29 @@ def get_outfnames(
             print(f"Processing code not found for product '{product_name}'")
             continue
 
-        fnames['ptiles'][pos] = f"{outputBasename}_{processing_code}_{product_name}_{psize}.tif"
+        fnames["ptiles"][pos] = (
+            f"{outputBasename}_{processing_code}_{product_name}_{psize}.tif"
+        )
 
     # Handle FPC product
-    product_name = 'fpc'
+    product_name = "fpc"
     processing_code = productNameToCode.get(product_name)
     if processing_code is None:
         print(f"Processing code not found for product '{product_name}'")
     else:
-        fnames['fpc'] = f"{outputBasename}_{processing_code}_{product_name}_{fpc_psize}.tif"
+        fnames["fpc"] = (
+            f"{outputBasename}_{processing_code}_{product_name}_{fpc_psize}.tif"
+        )
 
     # Handle CHM product
-    product_name = 'chm'
+    product_name = "chm"
     processing_code = productNameToCode.get(product_name)
     if processing_code is None:
         print(f"Processing code not found for product '{product_name}'")
     else:
-        fnames['chm'] = f"{outputBasename}_{processing_code}_{product_name}_{chm_psize}.tif"
+        fnames["chm"] = (
+            f"{outputBasename}_{processing_code}_{product_name}_{chm_psize}.tif"
+        )
 
     # Return the filenames dictionary
     return fnames
@@ -278,12 +293,10 @@ def createTileDict(tile, tile_s):
     # Split the tile name into components
     components = tile.split("_")
     if len(components) != 5:
-        msg = (
-              f"Input {tile} error in filename components.")
+        msg = f"Input {tile} error in filename components."
         logger.error(msg)
         raise ValueError(msg)
-        
-    
+
     # Extract components from the filename
     what = components[0]
     where = components[1]
@@ -292,9 +305,7 @@ def createTileDict(tile, tile_s):
 
     # Validate the 'what' component
     if what[:2] != "ap":
-        msg = (
-            f"Filename sensor check failed."
-            f"Input {tile} error in filename components.")
+        msg = f"Filename sensor check failed.Input {tile} error in filename components."
         logger.error(msg)
         raise ValueError(msg)
 
@@ -303,29 +314,27 @@ def createTileDict(tile, tile_s):
     if len(project[1:]) != 6:
         msg = (
             f"Invalid project name '{project}'. "
-            f"Expected 1 prefix character followed by 6 characters.")
+            f"Expected 1 prefix character followed by 6 characters."
+        )
         logger.error(msg)
         raise ValueError(msg)
-    
+
     # Create the tile dictionary
     tileDict = {
         "rawtilename": os.path.basename(tile),  # Original tile filename
-        "satellite": what[:2],                  # Satellite/platform code (e.g., 'ap')
-        "instrument": what[2:4],                # Instrument code
-        "returntype": what[4:6],                # Return type (e.g., 'dr')
-        "date": int(when),                      # Year of capture
-        "tile": where,                          # Tile location (e.g., x448750ys7133000)
-        "project": project[1:],                 # Project code (6 characters)
-        "stage": processing[:3],                # Processing stage code
-        "zone_prefix": processing[-2:-1],       # Zone prefix
-        "zoneCode": int(processing[-1:]),       # Zone code
-        "xst": np.int32(where[1:7]),            # Starting x-coordinate
-        "yst": np.int32(where[9:16]),           # Starting y-coordinate
-        "tile_s": np.int32(tile_s),             # Tile size
-        "components": components,               # Full list of filename components
+        "satellite": what[:2],  # Satellite/platform code (e.g., 'ap')
+        "instrument": what[2:4],  # Instrument code
+        "returntype": what[4:6],  # Return type (e.g., 'dr')
+        "date": int(when),  # Year of capture
+        "tile": where,  # Tile location (e.g., x448750ys7133000)
+        "project": project[1:],  # Project code (6 characters)
+        "stage": processing[:3],  # Processing stage code
+        "zone_prefix": processing[-2:-1],  # Zone prefix
+        "zoneCode": int(processing[-1:]),  # Zone code
+        "xst": np.int32(where[1:7]),  # Starting x-coordinate
+        "yst": np.int32(where[9:16]),  # Starting y-coordinate
+        "tile_s": np.int32(tile_s),  # Tile size
+        "components": components,  # Full list of filename components
     }
 
     return tileDict
-
-
-
