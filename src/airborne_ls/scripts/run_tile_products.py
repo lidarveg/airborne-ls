@@ -682,8 +682,19 @@ def run_tile_products(cmdargs):
             applyFPCcolor(outfnames["fpc"]) 
             logger.info(f"Tiles written to file {infileFull}")
 
-            os.system("gdaldem hillshade {} {} -compute_edges".format(outfnames["dem"], outfnames["demHS"]))
-           
+            args = ['gdaldem', 'hillshade',outfnames["dem"],outfnames["demHS"],'-compute_edges']          
+            proc = subprocess.Popen(args,  stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+            stdout,stderr=proc.communicate()
+            if proc.returncode != 0:
+                # an error happened!
+                err_msg = f"{stderr.strip()}. Code: {proc.returncode}"
+                raise ValueError(err_msg)           
+            else:
+                print(stdout)
+                print(stderr)  
+
+
+            
             ## calculate and write out to a temporary file return,pulse,area stats while data held in memory            
             infileFull = Path(cmdargs.indir).joinpath(infile)
             with laspy.open(infileFull) as f:

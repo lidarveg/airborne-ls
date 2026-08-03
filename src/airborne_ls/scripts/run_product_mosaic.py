@@ -167,7 +167,17 @@ def runMerge(cmdargs):
                         
         makeMosaicPathname = Path(os.path.join(cmdargs.outdr, makeMosaicFilename))
         vrt_filename = makeMosaicPathname.with_suffix('.vrt') 
-        os.system(f"gdalbuildvrt -input_file_list {tempList} {vrt_filename}")
+        
+        args = ['gdalbuildvrt', '-input_file_list',tempList,vrt_filename]          
+        proc = subprocess.Popen(args,  stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+        stdout,stderr=proc.communicate()
+        if proc.returncode != 0:
+            # an error happened!
+            err_msg = f"{stderr.strip()}. Code: {proc.returncode}"
+            raise ValueError(err_msg)           
+        else:
+            print(stdout)
+            print(stderr)  
 
         ########## note -- to create COG with history required two files
         outf_cog = makeMosaicPathname # correct name will be used for COG
