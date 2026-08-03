@@ -20,9 +20,9 @@ import argparse
 import logging
 import sys
 from pathlib import Path
-
 import laspy
 import numpy as np
+
 from airborne_ls import lazfile_rw
 
 logger = logging.getLogger(__name__)
