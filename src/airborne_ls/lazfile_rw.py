@@ -19,9 +19,9 @@ import sys
 import zipfile
 from copy import copy
 from pathlib import Path
-
 import laspy
 import numpy as np
+
 from airborne_ls import filenaming_methods
 
 logger = logging.getLogger(__name__)
