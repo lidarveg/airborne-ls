@@ -25,18 +25,17 @@ import logging
 import subprocess
 import sys
 from pathlib import Path
-
+from rios import rat
+from scipy import ndimage
 import laspy
 import numpy as np
+
 from airborne_ls import (
     filenaming_methods,
     fpc_method,
     gridding_methods,
     lazfile_rw,
-    rw_image_methods,
-)
-from rios import rat
-from scipy import ndimage
+    rw_image_methods)
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
