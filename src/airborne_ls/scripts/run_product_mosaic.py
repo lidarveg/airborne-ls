@@ -2,6 +2,10 @@
 
 """
 Purpose: Generate the product mosaics from individually processed LiDAR tiles.
+
+example: uv run python scripts/run_product_mosaic.py --indir lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/ \
+    --laz_flist  laz_flist --tile_s 1000. --psize 0.5 --chm_psize 0.2
+
 """
 
 import argparse

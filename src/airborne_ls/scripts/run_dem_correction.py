@@ -5,6 +5,9 @@ This script performs DEM infill for missing areas in LAS files and converts the 
 
 Needs refinement / further development
 
+example:  uv run python scripts/run_dem_correction.py --indir lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/ \
+    --laz_flist  laz_flist2 --tile_s 1000. --psize 0.5 --epsg 28356
+
 """
 
 import argparse
@@ -82,7 +85,7 @@ def run_dem_correction(cmdargs):
     # Read input file list
     fn = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
     with open(fn) as f:
-        infiles = (line.strip() for line in f)
+        infiles = [line.strip() for line in f]
 
     # Determine the range of files to process
     if not cmdargs.stopfilenum:

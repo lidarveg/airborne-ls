@@ -17,6 +17,12 @@
 #       The computation of the CHM is slow, will seek to optimise.
 #
 ####################################################################################################
+
+example:
+
+uv run python scripts/run_tile_products.py --indir lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/ --epsg 28356
+--laz_flist laz_flist --tile_s 1000. --psize 0.5 --chm_psize 0.2
+
 """
 
 import argparse
@@ -150,7 +156,7 @@ def getCmdargs(inputargs):
     # Validate command-line inputs
     laz_flist = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
     if not laz_flist.is_file():
-        raise AssertionError("laz_flist is invalid.")
+        raise AssertionError(f"laz_flist is invalid: {laz_flist} ")
 
     if not cmdargs.epsg:
         raise AssertionError("EPSG code must be supplied.")
@@ -158,7 +164,7 @@ def getCmdargs(inputargs):
     if cmdargs.stopfilenum is None:
         if laz_flist.is_file():
             with open(laz_flist) as f:
-                lazlist = (line.strip() for line in f)
+                lazlist = [line.strip() for line in f]
         cmdargs.stopfilenum = len(lazlist)
 
     if not cmdargs.tile_s:
@@ -179,7 +185,7 @@ def run_tile_products(cmdargs):
 
     # Read the list of LAS/LAZ files and extract the batch subset
     with open(Path(cmdargs.indir).joinpath(cmdargs.laz_flist)) as f:
-        infiles = (line.strip() for line in f)
+        infiles = [line.strip() for line in f]
 
     if not cmdargs.stopfilenum:
         cmdargs.stopfilenum = len(infiles)

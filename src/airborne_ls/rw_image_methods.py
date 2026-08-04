@@ -206,7 +206,7 @@ def readtxt(fn):
     read comma seperated txt file
     """
     with open(fn) as f:
-        txt = (line.strip() for line in f)
+        txt = [line.strip() for line in f]
     col = len((txt[0]).split(","))
     row = len(txt)
     data = np.zeros((col, row), dtype=np.float64)

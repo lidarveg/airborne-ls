@@ -19,6 +19,7 @@ import sys
 import zipfile
 from copy import copy
 from pathlib import Path
+
 import laspy
 import numpy as np
 
@@ -396,9 +397,8 @@ def bin_data(indir, infile, tile_s, nbins):
             )
         )
         neighbourfile = Path(indir).joinpath(fn)
-
         # If the neighbouring file exists, process it
-        if Path(neighbourfile).exists:
+        if Path(neighbourfile).is_file():
             binSize, nbins, newIdx, data = read_laz_index(neighbourfile, tile_s)
             bb = bins2access[pos]
 

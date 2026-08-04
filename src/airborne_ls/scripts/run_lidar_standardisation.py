@@ -12,6 +12,12 @@ options: educated guess which one to use by user (current approach) but a better
 point format from header (this should be correct) using the largest few files?
 
 
+
+example:
+    uv run python scripts/run_lidar_standardisation.py --indir lidarveg_testing_data/Brisbane_2014_LGA_sub/ \
+    --outdr lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/ --epsg 28356 --laz_flist laz_flist \
+        --tile_s 1000. --out_tile_s 1000. --ii 'mp' --proj brisba --year 2014 --binSize 50.
+
 """
 
 import argparse
@@ -126,18 +132,6 @@ def getCmdargs(inputargs):
         type=int,
         help="Stop position in file list for batch processing.",
     )
-    parser.add_argument(
-        "--memperjob",
-        type=int,
-        default=6,
-        help="Memory limit in GB for each batch job.",
-    )
-    parser.add_argument(
-        "--timeperjob",
-        type=int,
-        default=12,
-        help="Time limit in hours for each batch job.",
-    )
 
     # Metadata flags
 
@@ -165,9 +159,8 @@ def getCmdargs(inputargs):
                 fout.writelines(f"{Path(fn).name}\n" for fn in lazlist)
 
     infilelist = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
-    print(f"infilelist: {infilelist}")
     if not infilelist.is_file():
-        raise AssertionError("laz_flist is invalid")
+        raise AssertionError(f" laz_flist is invalid: {infilelist} ")
 
     # Validate project name
     if len(cmdargs.proj) != 6:
