@@ -52,90 +52,45 @@ def getCmdargs(inputargs):
     Returns:
         argparse.Namespace: Parsed arguments as a namespace object.
     """
-    parser = argparse.ArgumentParser(
-        description="Standardise LAS/LAZ files for lidarveg."
-    )
+    parser = argparse.ArgumentParser(description="Standardise LAS/LAZ files for lidarveg.")
 
     # Input and output directories
-    parser.add_argument(
-        "--indir",
-        required=True,
-        help="Full path to directory containing LAS/LAZ files.",
-    )
-    parser.add_argument(
-        "--outdr",
-        required=True,
-        help="Directory for newly named and indexed LAS/LAZ files.",
-    )
-    parser.add_argument(
-        "--laz_flist",
-        required=True,
-        help="Text file containing LAS/LAZ files to be processed; one file per row.",
-    )
+    parser.add_argument("--indir", required=True,
+        help="Full path to directory containing LAS/LAZ files.")
+    parser.add_argument("--outdr", required=True,
+        help="Directory for newly named and indexed LAS/LAZ files.")
+    parser.add_argument("--laz_flist", required=True,
+        help="Text file containing LAS/LAZ files to be processed; one file per row.")
 
     # Tile dimensions
-    parser.add_argument(
-        "--tile_s",
-        required=True,
-        type=float,
-        help="Maximum XY dimension of LAS/LAZ file (metres).",
-    )
-    parser.add_argument(
-        "--out_tile_s",
-        default=1000,
-        type=float,
-        help="Equal or smaller maximum XY dimension for output LAS/LAZ files (metres).",
-    )
+    parser.add_argument("--tile_s", required=True, type=float,
+        help="Maximum XY dimension of LAS/LAZ file (metres).")
+    parser.add_argument("--out_tile_s", default=1000, type=float,
+        help="Equal or smaller maximum XY dimension for output LAS/LAZ files (metres).")
 
     # EPSG and spatial database options
-    parser.add_argument(
-        "--epsg", type=int, required=True, help="EPSG code for map information."
-    )
+    parser.add_argument("--epsg", type=int, required=True,
+        help="EPSG code for map information.")
 
     # Metadata options
-    parser.add_argument(
-        "--ss",
-        type=str,
-        default="ap",
-        help="Platform type (e.g., 'ap' for airborne platform).",
-    )
-    parser.add_argument(
-        "--ii",
-        type=str,
-        required=True,
-        help="Predefined sensor code; can use uk if unknown",
-    )
-    parser.add_argument(
-        "--pp",
-        type=str,
-        default="dr",
-        help="Product type (e.g., 'dr' for discrete return).",
-    )
-    parser.add_argument(
-        "--proj", required=True, help="Six-character project name (e.g., 'brisba')."
-    )
-    parser.add_argument(
-        "--year", type=int, required=True, help="Year of data capture (e.g., 2022)."
-    )
+    parser.add_argument("--ss", type=str, default="ap",
+        help="Platform type (e.g., 'ap' for airborne platform).")
+    parser.add_argument("--ii", type=str, required=True,
+        help="Predefined sensor code; can use uk if unknown")
+    parser.add_argument("--pp", type=str, default="dr",
+        help="Product type (e.g., 'dr' for discrete return).")
+    parser.add_argument("--proj", required=True,
+        help="Six-character project name (e.g., 'brisba').")
+    parser.add_argument("--year", type=int, required=True,
+        help="Year of data capture (e.g., 2022).")
 
     # Tile indexing options
-    parser.add_argument(
-        "--binSize",
-        default=50.0,
-        type=float,
-        help="XY bin size for data indexing (metres).",
-    )
-    parser.add_argument(
-        "--startfilenum",
-        default=0,
-        type=int,
-        help="Start position in file list for batch processing.",
-    )
-    parser.add_argument(
-        "--stopfilenum",
-        type=int,
-        help="Stop position in file list for batch processing.",
-    )
+    parser.add_argument("--binSize", default=50.0, type=float,
+        help="XY bin size for data indexing (metres).")
+    parser.add_argument("--startfilenum", default=0, type=int,
+        help="Start position in file list for batch processing.")
+    parser.add_argument("--stopfilenum", type=int,
+        help="Stop position in file list for batch processing.")
 
     # Metadata flags
 
