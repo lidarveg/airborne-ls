@@ -205,93 +205,26 @@ def run_tile_products(cmdargs):
         # Skip processing if overwrite is not allowed and files already exist
         if not cmdargs.overwrite:
             # arrays to store processing segments of tiles
-            demTile = (
-                np.zeros(
-                    (
-                        int(cmdargs.tile_s / cmdargs.psize),
-                        int(cmdargs.tile_s / cmdargs.psize),
-                    )
-                )
-                + nullVal
-            )
-            csmTile = (
-                np.zeros(
-                    (
-                        int(cmdargs.tile_s / cmdargs.psize),
-                        int(cmdargs.tile_s / cmdargs.psize),
-                    )
-                )
-            ) + nullVal
-            chmTile = np.zeros(
-                (
-                    int(cmdargs.tile_s / cmdargs.chm_psize),
-                    int(cmdargs.tile_s / cmdargs.chm_psize),
-                )
-            )  # + nullVal
-            maxhTile = (
-                np.zeros(
-                    (
-                        int(cmdargs.tile_s / cmdargs.psize),
-                        int(cmdargs.tile_s / cmdargs.psize),
-                    )
-                )
-                + nullVal
-            )
-            intensTile = (
-                np.zeros(
-                    (
-                        int(cmdargs.tile_s / cmdargs.psize),
-                        int(cmdargs.tile_s / cmdargs.psize),
-                    )
-                )
-                + nullVal
-            )
-            ptDenTile = np.zeros(
-                (
-                    int(cmdargs.tile_s / cmdargs.psize),
-                    int(cmdargs.tile_s / cmdargs.psize),
-                ),
-                dtype=np.uint16,
-            )
-            grTile = (
-                np.zeros(
-                    (
-                        int(cmdargs.tile_s / cmdargs.psize),
-                        int(cmdargs.tile_s / cmdargs.psize),
-                    ),
-                    dtype=np.uint8,
-                )
-                + 254  # rtnClassNull # testing addition of new code to infill holes
-            )
-            non_grTile = (
-                np.zeros(
-                    (
-                        int(cmdargs.tile_s / cmdargs.psize),
-                        int(cmdargs.tile_s / cmdargs.psize),
-                    ),
-                    dtype=np.uint8,
-                )
-                + 254
-            )
-            pctTile = (
-                np.zeros(
-                    (
-                        len(percentiles),
-                        int(cmdargs.tile_s / cmdargs.ptile_s),
-                        int(cmdargs.tile_s / cmdargs.ptile_s),
-                    )
-                )
-                + nullVal
-            )
-            fpcTile = (
-                np.zeros(
-                    (
-                        int(cmdargs.tile_s / cmdargs.fpc_psize),
-                        int(cmdargs.tile_s / cmdargs.fpc_psize),
-                    )
-                )
-                + rtnClassNull
-            )
+            tileSizePix = int(cmdargs.tile_s / cmdargs.psize)
+            tileShape = (tileSizePix, tileSizePix)
+            tileSizeChmPix = int(cmdargs.tile_s / cmdargs.chm_psize)
+            tileChmShape = (tileSizeChmPix, tileSizeChmPix)
+            tileSizeFpcPix = int(cmdargs.tile_s / cmdargs.fpc_psize)
+            tileFpcShape = (tileSizeFpcPix, tileSizeFpcPix)
+            tilePctShape = (len(percentiles), tileSizePix, tileSizePix)
+
+            demTile = np.full(tileShape, nullVal)
+            csmTile = np.full(tileShape, nullVal)
+            chmTile = np.zeros(tileChmShape)
+            maxhTile = np.full(tileShape, nullVal)
+            intensTile = np.full(tileShape, nullVal)
+            ptDenTile = np.zeros(tileShape, dtype=np.uint16)
+            # rtnClassNull # testing addition of new code to infill holes
+            grTile = np.full(tileShape, 254, dtype=np.uint8)
+            non_grTile = np.full(tileShape, 254, dtype=np.uint8)
+            pctTile = np.full(tilePctShape, nullVal)
+            fpcTile = np.full(tileFpcShape, rtnClassNull)
+
             # read in data
             # bData stores the data in chunks/bins for rapid access
             bData, northing, easting, rowS = lazfile_rw.bin_data(
