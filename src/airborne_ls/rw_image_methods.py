@@ -9,7 +9,7 @@ import subprocess
 from pathlib import Path
 
 import numpy as np
-from osgeo import gdal, osr
+from osgeo import gdal, osr, gdal_array
 
 # from airborne-ls import
 
@@ -60,16 +60,7 @@ def writeImage(image, outfile, cmdargs, driver="GTiff", tlx=0.0, tly=0.0,
     dt = image.dtype
 
     # Map numpy dtype to GDAL data type
-    dtype_map = {
-        "uint8": gdal.GDT_Byte,
-        "int16": gdal.GDT_Int16,
-        "uint16": gdal.GDT_UInt16,
-        "int32": gdal.GDT_Int32,
-        "uint32": gdal.GDT_UInt32,
-        "float32": gdal.GDT_Float32,
-        "float64": gdal.GDT_Float64,
-    }
-    gdaldtype = dtype_map.get(dt.name)
+    gdaldtype = gdal_array.NumericTypeCodeToGDALTypeCode(dt)
     if gdaldtype is None:
         raise ValueError(f"Unsupported data type: {dt}")
 
