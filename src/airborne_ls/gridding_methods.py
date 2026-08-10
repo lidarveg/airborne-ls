@@ -157,7 +157,7 @@ def circleLocs(radius):
     return x**2 + y**2 <= radius**2
 
 
-###########################################################################################################
+###################################################################################################
 @jit
 def maxH_workflow_layers(
     row,
@@ -175,15 +175,18 @@ def maxH_workflow_layers(
     haveGroundReturn,
 ):
     """
-    Compute the maximum height grid and associated x, y locations from a LiDAR point cloud as 2D arrays.
+    Compute the maximum height grid and associated x, y locations from a LiDAR point cloud as
+    2D arrays.
 
     Parameters:
         row, col: Arrays of row and column indices for each point.
         x, y, z: Arrays of x, y, and z coordinates of the LiDAR points.
         intensity: Array of intensity values for each point.
         classi: Array of classification values for each point.
-        xArr, yArr, zArr: 2D arrays to store x, y, and z values at the maximum height for each grid cell.
-        intensityAtMaxH: 2D array to store intensity values at the maximum height for each grid cell.
+        xArr, yArr, zArr: 2D arrays to store x, y, and z values at the maximum height for each
+                          grid cell.
+        intensityAtMaxH: 2D array to store intensity values at the maximum height for each
+                         grid cell.
         nonGroundClasses: 2D array to store non-ground classification values for each grid cell.
         haveGroundReturn: 2D array to indicate whether a ground return exists for each grid cell.
 
@@ -212,7 +215,8 @@ def fstR_density(row, col, x, y, density):
 
     Parameters:
         row, col: Arrays of row and column indices for each point.
-        x, y: Arrays of x and y coordinates of the first return data points (not used in this function).
+        x, y: Arrays of x and y coordinates of the first return data points
+              (not used in this function).
         density: 2D array to store the density count for each grid cell.
     """
     numPts = len(row)
@@ -221,7 +225,7 @@ def fstR_density(row, col, x, y, density):
         density[r, c] += 1
 
 
-###########################################################################################################
+###################################################################################################
 def createHeightAboveGround(nonGround, x, y, z, xVals, yVals, zVals):
     """
     Create height above ground by interpolating ground elevation for the coordinates
@@ -355,7 +359,7 @@ def maxH_array(row, col, z, maxH_hag):
         maxH_hag[r, c] = max(maxH_hag[r, c], z[i])
 
 
-###################################################################################################################################
+###################################################################################################
 @jit
 def count_fstR(row, col, density):
     """
@@ -373,7 +377,7 @@ def count_fstR(row, col, density):
         density[row[p], col[p]] += 1
 
 
-############################################################################################################
+###################################################################################################
 def doHeightPercentileOutputs(
     x,
     y,
@@ -490,7 +494,7 @@ def doHeightPercentileOutputs_idx(
     return percentile_arr, nRows_pct
 
 
-#########################################################################################################################
+###################################################################################################
 def dem_infill(dem, codes, nullVal=-999.0, minElev=-4):
     """
     Infill missing areas of a Digital Elevation Model (DEM). This is mainly used
@@ -570,8 +574,8 @@ def dem_infill(dem, codes, nullVal=-999.0, minElev=-4):
     return dem
 
 
-###################################################################################################################################
-## CSM
+###################################################################################################
+# CSM
 def chm_alg(
     chunk,
     chunk_hag,
@@ -659,4 +663,4 @@ def chm_alg(
     return outarr
 
 
-###################################################################################################################################
+###################################################################################################

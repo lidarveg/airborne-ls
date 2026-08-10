@@ -1,0 +1,11 @@
+[flake8]
+max-line-length = 100
+exclude = .git,__pycache__,build,dist
+# Error codes we should ignore
+# W503 line break before binary operator
+# W504 line break after binary operator
+# E203 whitespace before ':'
+# E128 continuation line under-indented for visual indent
+# E225 missing whitespace around operator
+# E228 missing whitespace around modulo operator
+ignore = W503,W504,E203,E128,E225,E228

@@ -4,8 +4,9 @@
 coding of method:
 
     Fisher, A., Armston, J., Goodwin, N., Scarth, P. (2020). Modelling canopy gap probability,
-    foliage projective cover and crown projective cover from airborne lidar metrics in Australian
-    forests and woodlands. Remote Sensing of Environment, 237, 111520. doi: 10.1016/j.rse.2019.111520
+    foliage projective cover and crown projective cover from airborne lidar metrics in
+    Australian forests and woodlands. Remote Sensing of Environment, 237, 111520.
+    doi: 10.1016/j.rse.2019.111520
 
 """
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env python
 
 """
-Script for processing LAS/LAZ files using laspy and converting them to a structured numpy record array.
+Script for processing LAS/LAZ files using laspy and converting them to a structured
+numpy record array.
 """
 
 import subprocess
@@ -13,7 +14,7 @@ from osgeo import gdal, osr
 # from airborne-ls import
 
 
-##############################################################################################################
+###################################################################################################
 
 
 def writeImage(
@@ -42,10 +43,12 @@ def writeImage(
     - parent_file: The parent LAS file used to generate the image.
 
 
-    GTiff Driver Issues: When using the GTiff driver, I encountered errors due to mismatches between the file extension and the driver or due to incorrect creation options.
+    GTiff Driver Issues: When using the GTiff driver, I encountered errors due to
+    mismatches between the file extension and the driver or due to incorrect creation options.
 
     To resolve this issue, we need to switching to the GTiff driver and ensuring that:
-    The Output File Extension Matches the Driver: When using the GTiff driver, the output file should have a .tif extension, not .img.
+    The Output File Extension Matches the Driver: When using the GTiff driver, the output
+    file should have a .tif extension, not .img.
 
     """
 
@@ -91,14 +94,14 @@ def writeImage(
         # set color for each value
         colors.SetColorEntry(0, (254, 254, 254))  # never classified:
         colors.SetColorEntry(1, (200, 200, 200))  # unclassified: light gray
-        colors.SetColorEntry(2, (0, 0, 0))  # ground classification
-        colors.SetColorEntry(3, (0, 240, 0))  ## low veg: green1
-        colors.SetColorEntry(4, (0, 160, 0))  ## medium veg: green2
-        colors.SetColorEntry(5, (0, 80, 0))  ## high veg: green3
-        colors.SetColorEntry(6, (255, 0, 0))  ## building: red
+        colors.SetColorEntry(2, (0, 0, 0))        # ground classification
+        colors.SetColorEntry(3, (0, 240, 0))      # low veg: green1
+        colors.SetColorEntry(4, (0, 160, 0))      # medium veg: green2
+        colors.SetColorEntry(5, (0, 80, 0))       # high veg: green3
+        colors.SetColorEntry(6, (255, 0, 0))      # building: red
         colors.SetColorEntry(7, (255, 255, 0))
         colors.SetColorEntry(8, (255, 255, 0))
-        colors.SetColorEntry(9, (0, 0, 255))  ## blue for water
+        colors.SetColorEntry(9, (0, 0, 255))      # blue for water
         colors.SetColorEntry(10, (255, 0, 255))
         colors.SetColorEntry(11, (255, 20, 255))
         colors.SetColorEntry(12, (255, 30, 255))
@@ -109,7 +112,7 @@ def writeImage(
         colors.SetColorEntry(17, (255, 80, 255))
         colors.SetColorEntry(18, (255, 90, 255))
         colors.SetColorEntry(19, (255, 100, 255))
-        colors.SetColorEntry(254, (101, 67, 33))  ## brown for background
+        colors.SetColorEntry(254, (101, 67, 33))  # brown for background
 
     if nz > 1:
         for i in range(nz):
@@ -137,7 +140,7 @@ def writeImage(
     band = None
     ds = None
 
-    ## convert to COG ???
+    # convert to COG ???
     if outfile.find("fpc") < 0:
         args = [
             "gdal_translate",
@@ -273,4 +276,4 @@ def get_mmXYZ(x, y, z):
     return minX, maxX, minY, maxY, minZ, maxZ
 
 
-##############################################################################################################################
+###################################################################################################

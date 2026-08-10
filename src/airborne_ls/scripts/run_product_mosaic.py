@@ -3,7 +3,8 @@
 """
 Purpose: Generate the product mosaics from individually processed LiDAR tiles.
 
-example: uv run python scripts/run_product_mosaic.py --indir lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/ \
+example: uv run python scripts/run_product_mosaic.py \
+    --indir lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/ \
     --laz_flist  laz_flist --tile_s 1000. --psize 0.5 --chm_psize 0.2
 
 """
@@ -61,48 +62,25 @@ def getCmdargs(inputargs):
     """
     parser = argparse.ArgumentParser(description="Generate mosaics from LiDAR tiles.")
 
-    parser.add_argument(
-        "--indir", required=True, help="Top-level directory containing input tiles."
-    )
-    parser.add_argument(
-        "--outdr", help="Directory to write mosaics. Default is the current directory."
-    )
-    parser.add_argument(
-        "--laz_flist", required=True, help="File containing the list of LAS/LAZ files."
-    )
-    parser.add_argument(
-        "--tile_s",
-        type=float,
-        required=True,
-        help="XY dimensions of LAS tile (metres).",
-    )
-    parser.add_argument(
-        "--psize",
-        default=0.5,
-        type=float,
-        help="Pixel size of gridded DEM, Intensity, and maxH output layers (metres). Default: %(default)s.",
-    )
-    parser.add_argument(
-        "--ptile_s",
-        default=5,
-        type=float,
-        help="Pixel size of percentile output layers (metres). Default: %(default)s.",
-    )
-    parser.add_argument(
-        "--fpc_psize",
-        default=10.0,
-        type=float,
-        help="Pixel size of the FPC layer (metres). Default: %(default)s.",
-    )
-    parser.add_argument(
-        "--chm_psize",
-        default=None,
-        type=float,
-        help="Optional: value estimated using pulse density (metres).",
-    )
-    parser.add_argument(
-        "--outStageList", help="Three-letter stage code. If blank, run all stage codes."
-    )
+    parser.add_argument("--indir", required=True,
+        help="Top-level directory containing input tiles.")
+    parser.add_argument("--outdr",
+        help="Directory to write mosaics. Default is the current directory.")
+    parser.add_argument("--laz_flist", required=True,
+        help="File containing the list of LAS/LAZ files.")
+    parser.add_argument("--tile_s", type=float, required=True,
+        help="XY dimensions of LAS tile (metres).")
+    parser.add_argument("--psize", default=0.5, type=float,
+        help=("Pixel size of gridded DEM, Intensity, and maxH output layers (metres). " +
+              "Default: %(default)s."))
+    parser.add_argument("--ptile_s", default=5, type=float,
+        help="Pixel size of percentile output layers (metres). Default: %(default)s.")
+    parser.add_argument("--fpc_psize", default=10.0, type=float,
+        help="Pixel size of the FPC layer (metres). Default: %(default)s.")
+    parser.add_argument("--chm_psize", default=None, type=float,
+        help="Optional: value estimated using pulse density (metres).")
+    parser.add_argument("--outStageList",
+        help="Three-letter stage code. If blank, run all stage codes.")
 
     cmdargs = parser.parse_args(inputargs)
 
@@ -182,7 +160,7 @@ def runMerge(cmdargs):
                     layer = fnames[stagec_def[outStage]]
 
                 if Path(layer).is_file():
-                    ##### testing
+                    # #### testing
                     if outStage == "bb0":
                         infilled_demf = layer.replace("dem", "dem_infilled")
                         if Path(infilled_demf).is_file():
@@ -195,10 +173,14 @@ def runMerge(cmdargs):
                     missing_tiles.append(layer)
         fout.close()
 
-        if len(str(year)) > 4:
-            makeMosaicFilename = f"ap{sensor_code}dr_r{project}_y{year}_{outStage}{zone_prefix}{zone}_{psizes[outStage]}.tif"
-        else:
-            makeMosaicFilename = f"ap{sensor_code}dr_r{project}_{year}_{outStage}{zone_prefix}{zone}_{psizes[outStage]}.tif"
+        what = f"ap{sensor_code}dr"
+        where = f"r{project}"
+        when = f"y{year}"
+        if len(str(year)) == 4:
+            when = f"{year}"
+        stageAndZone = f"{outStage}{zone_prefix}{zone}"
+        res = f"{psizes[outStage]}"
+        makeMosaicFilename = f"{what}_{where}_{when}_{stageAndZone}_{res}.tif"
 
         logger.info(f"Output mosaic name: {makeMosaicFilename}")
         logger.debug(f"Missing tiles in {makeMosaicFilename} include {missing_tiles}")
@@ -217,12 +199,11 @@ def runMerge(cmdargs):
             print(stdout)
             print(stderr)
 
-        ########## note -- to create COG with history required two files
+        # ######### note -- to create COG with history required two files
         outf_cog = makeMosaicPathname  # correct name will be used for COG
         outf_tif = str(makeMosaicPathname).replace(
-            Path(makeMosaicPathname).suffix, "_temp.tif"
-        )
-        #########
+            Path(makeMosaicPathname).suffix, "_temp.tif")
+        # ########
 
         command = [
             "gdal_translate",
@@ -254,7 +235,7 @@ def runMerge(cmdargs):
         vrt_filename.rename(vrt_temp_path)  # Move the file
         vrt_filename = vrt_temp_path
 
-        ## convert to COG
+        # convert to COG
         args = [
             "gdal_translate",
             outf_tif,
