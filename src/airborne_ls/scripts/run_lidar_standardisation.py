@@ -7,15 +7,19 @@ Purpose: run importation of supplied las/laz files for lidarveg
 bin_size: in my experience 100m works well for lower density datasets (<10 pts/ mt2)
           and 50m works well for lower density datasets (> 10 pts/ mt2).
           Not sure whether a finer bin size will be required (e.g. 25m)?
-challenge: most project information (i.e. header info) cannot be relied upon to after this processing stage
-options: educated guess which one to use by user (current approach) but a better approach could be to look at file size and
+challenge: most project information (i.e. header info) cannot be relied upon to after
+           this processing stage
+options: educated guess which one to use by user (current approach) but a better approach
+         could be to look at file size and
 point format from header (this should be correct) using the largest few files?
 
 
 
 example:
-    uv run python scripts/run_lidar_standardisation.py --indir lidarveg_testing_data/Brisbane_2014_LGA_sub/ \
-    --outdr lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/ --epsg 28356 --laz_flist laz_flist \
+    uv run python scripts/run_lidar_standardisation.py\
+        --indir lidarveg_testing_data/Brisbane_2014_LGA_sub/ \
+        --outdr lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/\
+        --epsg 28356 --laz_flist laz_flist \
         --tile_s 1000. --out_tile_s 1000. --ii 'mp' --proj brisba --year 2014 --binSize 50.
 
 """
@@ -314,7 +318,8 @@ def check_input_fns(indir, infilelist):
         infilelist (Path): Path to the file containing the list of LAS/LAZ files.
 
     Returns:
-        tuple: A tuple containing the list of valid files and a boolean indicating if all files are valid.
+        tuple: A tuple containing the list of valid files and a boolean indicating if
+               all files are valid.
     """
     with open(infilelist) as f:
         filelist = [line.strip() for line in f]

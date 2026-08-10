@@ -51,7 +51,8 @@ def get_stageDict():
     Returns a dictionary mapping stage codes to product descriptions.
 
     Returns:
-        dict: A dictionary where keys are stage codes (e.g., 'bb0') and values are product descriptions.
+        dict: A dictionary where keys are stage codes (e.g., 'bb0') and
+              values are product descriptions.
     """
     productDict = {
         "bb0": "dem",
@@ -127,7 +128,8 @@ def get_psizeDict(psize=0.5, ptile_s=5, fpc_psize=10, chm_psize=0.2):
         chm_psize (float): Resolution for CHM in metres (default: 0.2).
 
     Returns:
-        dict: A dictionary where keys are product codes (e.g., 'bb0') and values are resolution strings.
+        dict: A dictionary where keys are product codes (e.g., 'bb0') and
+              values are resolution strings.
     """
     # Convert resolutions to appropriate string formats
     psize = f"r{int(psize * 100)}cm"
@@ -195,10 +197,12 @@ def get_outfnames(
         ptile_s (float): Resolution for percentile tiles in metres (default: 5).
         fpc_psize (float): Resolution for FPC in metres (default: 10).
         chm_psize (float): Resolution for CHM in metres (default: 0.2).
-        pptiles (list[int]): List of percentiles to generate filenames for (default: (1, 5, 25, 50, 75, 95, 99)).
+        pptiles (list[int]): List of percentiles to generate filenames for
+                             (default: (1, 5, 25, 50, 75, 95, 99)).
 
     Returns:
-        dict: A dictionary where keys are product names and values are their corresponding filenames.
+        dict: A dictionary where keys are product names and
+              values are their corresponding filenames.
     """
     # Convert resolutions to appropriate string formats
     psize = f"r{int(psize * 100)}cm" if psize < 10 else f"r{int(psize)}m"

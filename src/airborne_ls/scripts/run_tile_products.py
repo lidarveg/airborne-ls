@@ -13,15 +13,16 @@
 # - Northing and easting tile locations are included in the filename.
 # - New sub-tile indexing has been applied to optimise memory usage.
 #
-# Note: The resolution and point density of the datasets will significantly influence processing times.
-#       The computation of the CHM is slow, will seek to optimise.
+# Note: The resolution and point density of the datasets will significantly influence
+#       processing times. The computation of the CHM is slow, will seek to optimise.
 #
 ####################################################################################################
 
 example:
 
-uv run python scripts/run_tile_products.py --indir lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/ --epsg 28356
---laz_flist laz_flist --tile_s 1000. --psize 0.5 --chm_psize 0.2
+uv run python scripts/run_tile_products.py \
+    --indir lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/ --epsg 28356 \
+    --laz_flist laz_flist --tile_s 1000. --psize 0.5 --chm_psize 0.2
 
 """
 
@@ -75,61 +76,29 @@ def getCmdargs(inputargs):
     # Input and output directories
     parser.add_argument("--indir", help="Directory containing LAS/LAZ files.")
     parser.add_argument("--laz_flist", help="List of LAS/LAZ files to be processed.")
-    parser.add_argument(
-        "--tile_s", type=float, help="XY dimensions of LAS tile in metres."
-    )
+    parser.add_argument("--tile_s", type=float, help="XY dimensions of LAS tile in metres.")
     parser.add_argument("--epsg", type=int, help="EPSG code for map information.")
 
     # Output resolutions
-    parser.add_argument(
-        "--psize",
-        default=0.5,
-        type=float,
-        help="Pixel size of gridded DEM, Intensity, and maxH output layers (metres). Default: %(default)s.",
-    )
-    parser.add_argument(
-        "--ptile_s",
-        default=5,
-        type=float,
-        help="Pixel size of percentile output layers (metres). Default: %(default)s.",
-    )
-    parser.add_argument(
-        "--fpc_psize",
-        default=10.0,
-        type=float,
-        help="Pixel size of the FPC layer (metres). Default: %(default)s.",
-    )
-    parser.add_argument(
-        "--chm_psize",
-        default=0.2,
-        type=float,
-        help="Pixel size of the CHM layer (metres). Default: %(default)s.",
-    )
+    parser.add_argument("--psize", default=0.5, type=float,
+        help=("Pixel size of gridded DEM, Intensity, and maxH output layers (metres). " +
+              "Default: %(default)s."))
+    parser.add_argument("--ptile_s", default=5, type=float,
+        help="Pixel size of percentile output layers (metres). Default: %(default)s.")
+    parser.add_argument("--fpc_psize", default=10.0, type=float,
+        help="Pixel size of the FPC layer (metres). Default: %(default)s.")
+    parser.add_argument("--chm_psize", default=0.2, type=float,
+        help="Pixel size of the CHM layer (metres). Default: %(default)s.")
 
     # File processing options
-    parser.add_argument(
-        "--startfilenum",
-        default=0,
-        type=int,
-        help="Position within laz_flist to start batch processing. Default: %(default)s.",
-    )
-    parser.add_argument(
-        "--stopfilenum",
-        type=int,
-        help="Position within laz_flist to stop batch processing.",
-    )
-    parser.add_argument(
-        "--split_fpc",
-        default=False,
-        action=argparse.BooleanOptionalAction,
-        help="Split flight lines for FPC calculations.",
-    )
-    parser.add_argument(
-        "--overwrite",
-        default=False,
-        action=argparse.BooleanOptionalAction,
-        help="Overwrite existing layers without checking.",
-    )
+    parser.add_argument("--startfilenum", default=0, type=int,
+        help="Position within laz_flist to start batch processing. Default: %(default)s.")
+    parser.add_argument("--stopfilenum", type=int,
+        help="Position within laz_flist to stop batch processing.")
+    parser.add_argument("--split_fpc", default=False, action=argparse.BooleanOptionalAction,
+        help="Split flight lines for FPC calculations.")
+    parser.add_argument("--overwrite", default=False, action=argparse.BooleanOptionalAction,
+        help="Overwrite existing layers without checking.")
 
     cmdargs = parser.parse_args(inputargs)
 
@@ -235,7 +204,7 @@ def run_tile_products(cmdargs):
 
         # Skip processing if overwrite is not allowed and files already exist
         if not cmdargs.overwrite:
-            ## arrays to store processing segments of tiles
+            # arrays to store processing segments of tiles
             demTile = (
                 np.zeros(
                     (
@@ -337,7 +306,7 @@ def run_tile_products(cmdargs):
             for rowB in range(1, rowS + 1, 1):
                 for colB in range(1, rowS + 1, 1):
                     fnc = f"row_{rowB}_col_{colB}"
-                    binChunk = np.copy(bData[fnc])  ## reset as we don't need buffer
+                    binChunk = np.copy(bData[fnc])  # reset as we don't need buffer
                     chunk = np.copy(bData[fnc])
                     if len(chunk) > 10:
                         for n8 in neigh8:
@@ -346,7 +315,7 @@ def run_tile_products(cmdargs):
                             if (temp8.shape)[0] > 1:
                                 chunk = np.concatenate((chunk, temp8))
 
-                        ## run dem
+                        # run dem
                         grdhits = chunk["CLASSIFICATION"] == 2
                         if np.sum(grdhits) > 10:
                             xst_bin = easting + int((rowB - 1) * binSize)
@@ -367,7 +336,7 @@ def run_tile_products(cmdargs):
                                 demTile[yst : (yst + nRows), xst : (xst + nRows)] = dem
 
                             #######################################################################
-                            ## run csm
+                            # run csm
                             xValsA, yValsA, zValsA = gridding_methods.maxH_xyzLocs(
                                 chunk["X"], chunk["Y"], chunk["Z"], cmdargs.psize
                             )
@@ -455,9 +424,9 @@ def run_tile_products(cmdargs):
                                 nonGroundClasses
                             )
 
-                            ############################################################################
-                            ## CREATE Canopy Height Model
-                            ## refer Khosravipour_2014 pit-free
+                            #######################################################################
+                            # CREATE Canopy Height Model
+                            # refer Khosravipour_2014 pit-free
                             number_veg_rets = np.sum(
                                 binChunk["CLASSIFICATION"] == 4
                             ) + np.sum(
@@ -621,7 +590,7 @@ def run_tile_products(cmdargs):
                 parent_file=infileFull,
             )
             #######################
-            ## interpolating over buildings can be a problem - msk out affected pixels here
+            # interpolating over buildings can be a problem - msk out affected pixels here
             multi = cmdargs.psize / cmdargs.chm_psize
             veg_msk = (non_grTile == 6) * 1 + (non_grTile == 9) * 1
             veg_msk = ndimage.zoom(veg_msk, multi, order=0)
@@ -748,7 +717,8 @@ def run_tile_products(cmdargs):
                 print(stdout)
                 print(stderr)
 
-            ## calculate and write out to a temporary file return,pulse,area stats while data held in memory
+            # calculate and write out to a temporary file return,pulse,area stats while
+            # data held in memory
             infileFull = Path(cmdargs.indir).joinpath(infile)
             with laspy.open(infileFull) as f:
                 nReturns = f.header.point_count
@@ -771,7 +741,7 @@ def run_tile_products(cmdargs):
             fout.close()
 
 
-#######################################################################################################
+###################################################################################################
 def reorder_flist(lazlistfull):
     """
     Reorder a list of LAS/LAZ files by file size in descending order.
@@ -787,7 +757,7 @@ def reorder_flist(lazlistfull):
     return np.array(lazlistfull)[sorted_indices]
 
 
-#######################################################################################################
+###################################################################################################
 def applyFPCcolor(fout):
     """
     Apply a colour map to the FPC (Foliage Projective Cover) output.
@@ -844,9 +814,9 @@ def check_divisible(psizes):
                 sys.exit(msg)
 
 
-######################################################################################################
-######################################################################################################
-######################################################################################################
+###############################################################################################
+###############################################################################################
+###############################################################################################
 
 
 def main(args=None):

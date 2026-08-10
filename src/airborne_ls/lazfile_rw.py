@@ -28,7 +28,7 @@ from airborne_ls import filenaming_methods
 logger = logging.getLogger(__name__)
 
 
-################################################################################################################
+###################################################################################################
 def laspy2rec(infile):
     """
     Convert a LAS/LAZ file to a numpy record array using laspy.
@@ -96,7 +96,7 @@ def laspy2rec(infile):
     return las_data, header
 
 
-########################################################################################################################################
+###################################################################################################
 def standardise_lasf(
     fn_base,
     outdr,
@@ -109,7 +109,8 @@ def standardise_lasf(
     filename_Parent,
 ):
     """
-    Using laspy, rename file using naming convention, add index, remove noise and write out supplied files to .laz
+    Using laspy, rename file using naming convention, add index, remove noise and write out
+    supplied files to .laz
 
     Parameters:
         fn_base (str): Base filename for output files.
@@ -141,8 +142,10 @@ def standardise_lasf(
                 outfn = str(Path(outdr).joinpath(fn_base2))
 
                 # simply exclude points outside the tile extents + irrelevant codes/data
-                # 7 = low point noise, 18 = high point noise.. note some providers can use different / new codes
-                ## z-thresholds are problematic.. as you can have negative elevation and what upper limit? for aus 3000m works
+                # 7 = low point noise, 18 = high point noise.. note some providers can use
+                # different / new code
+                # z-thresholds are problematic.. as you can have negative elevation and what
+                # upper limit? for aus 3000m works
 
                 good_indices = (
                     (
@@ -166,8 +169,8 @@ def standardise_lasf(
                     new_las = laspy.LasData(new_hdr)
 
                     ##########################################################################
-                    ## GENERATE INDEX
-                    nbinsRow = np.round(out_tile_s / binSize)  ## ****
+                    # GENERATE INDEX
+                    nbinsRow = np.round(out_tile_s / binSize)  # ****
                     xIdx = ((data2.x - easting_new) // binSize).astype(np.int32)
                     yIdx = ((northing_new - np.array(data2.y)) // binSize).astype(
                         np.int32
@@ -178,7 +181,7 @@ def standardise_lasf(
                     start = 0
                     newIdx = [0]
                     sortingIdx = []
-                    ### needs speeding up..
+                    # needs speeding up..
                     for ct, binIdx in enumerate(range(nbins + 1)):
                         vals2 = np.argwhere(index == binIdx)
                         if sum(vals2) >= 0:
@@ -258,8 +261,8 @@ def standardise_lasf(
     return status
 
 
-##############################################################################################################################
-## LAZ INDEX
+###################################################################################################
+# LAZ INDEX
 def read_laz_index(infile, tile_s):
     """
     e.g binSize,nbins,newIdx,las_data = read_laz_index(outfn)
@@ -349,7 +352,7 @@ def read_laz_index(infile, tile_s):
         raise FileNotFoundError(msg)
 
 
-##############################################################################################################################
+###################################################################################################
 def bin_data(indir, infile, tile_s, nbins):
     """
     Process LAS/LAZ files by binning data into a grid structure.
@@ -362,7 +365,8 @@ def bin_data(indir, infile, tile_s, nbins):
 
     Returns:
         tuple: A tuple containing:
-            - bins (dict): A dictionary where keys are bin names (e.g., "row_x_col_y") and values are data arrays.
+            - bins (dict): A dictionary where keys are bin names (e.g., "row_x_col_y") and
+                           values are data arrays.
             - yst (int): Starting Y-coordinate of the tile.
             - xst (int): Starting X-coordinate of the tile.
             - rowS (int): Number of rows in the grid.
@@ -423,7 +427,7 @@ def bin_data(indir, infile, tile_s, nbins):
     return bins, fn_dict["yst"], fn_dict["xst"], rowS
 
 
-##############################################################################################################################
+###################################################################################################
 def get_bin_indices(nbins, tile_s):
     """
     Generate indices for bins of surrounding eight LAS/LAZ tiles for processing.
@@ -488,8 +492,7 @@ def get_bin_indices(nbins, tile_s):
     return tile_idx, bins2access, xbinID, ybinID, rowS
 
 
-##############################################################################################################################
-##############################################################################################################################
+###################################################################################################
 # def add_hag_evlr(hag_data,outf):
 #     """
 #     code for adding height-above-ground (hag) to evlr
@@ -577,7 +580,11 @@ def run_zipf(fn, laz_flist, outdr, stagecode="ba2"):
     tileDict = filenaming_methods.createTileDict(fn, 1000)
 
     # Generate filenames for BA2 and BA3 zip files
-    fn_out = f"ap{tileDict['instrument']}{tileDict['returntype']}_r{tileDict['project']}_{tileDict['date']}_{stagecode}{tileDict['zone_prefix']}{tileDict['zoneCode']}.zip"
+    what = f"ap{tileDict['instrument']}{tileDict['returntype']}"
+    where = f"r{tileDict['project']}"
+    when = f"{tileDict['date']}"
+    stageAndZone = f"{stagecode}{tileDict['zone_prefix']}{tileDict['zoneCode']}"
+    fn_out = f"{what}_{where}_{when}_{stageAndZone}.zip"
 
     # Write zip file
     archive_name = Path(outdr).joinpath(fn_out)

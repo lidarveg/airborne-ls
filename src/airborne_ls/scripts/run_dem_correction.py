@@ -1,12 +1,14 @@
 #!/usr/bin/env python
 
 """
-This script performs DEM infill for missing areas in LAS files and converts the results to Cloud Optimized GeoTIFF (COG) format.
+This script performs DEM infill for missing areas in LAS files and converts the results to
+Cloud Optimized GeoTIFF (COG) format.
 
 Needs refinement / further development
 
-example:  uv run python scripts/run_dem_correction.py --indir lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/ \
-    --laz_flist  laz_flist2 --tile_s 1000. --psize 0.5 --epsg 28356
+example:  uv run python scripts/run_dem_correction.py \
+            --indir lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/ \
+            --laz_flist  laz_flist2 --tile_s 1000. --psize 0.5 --epsg 28356
 
 """
 
@@ -39,38 +41,19 @@ def getCmdargs(inputargs):
     """
     parser = argparse.ArgumentParser(description="Batch processing for LAS files.")
 
-    parser.add_argument(
-        "--indir", required=True, help="Directory containing LAS files."
-    )
-    parser.add_argument(
-        "--laz_flist", required=True, help="List of LAS files to be processed."
-    )
-    parser.add_argument(
-        "--epsg", type=int, required=True, help="EPSG code for map information."
-    )
-    parser.add_argument(
-        "--psize",
-        default=0.5,
-        type=float,
-        help="Pixel size of gridded DEM, Intensity, and maxH output layers (metres). Default: %(default)s.",
-    )
-    parser.add_argument(
-        "--tile_s",
-        type=float,
-        required=True,
-        help="XY dimensions of LAS tile in metres.",
-    )
-    parser.add_argument(
-        "--startfilenum",
-        default=0,
-        type=int,
-        help="Position within laz_flist to start batch processing. Default: %(default)s.",
-    )
-    parser.add_argument(
-        "--stopfilenum",
-        type=int,
-        help="Position within laz_flist to stop batch processing.",
-    )
+    parser.add_argument("--indir", required=True, help="Directory containing LAS files.")
+    parser.add_argument("--laz_flist", required=True, help="List of LAS files to be processed.")
+    parser.add_argument("--epsg", type=int, required=True,
+        help="EPSG code for map information.")
+    parser.add_argument("--psize", default=0.5, type=float,
+        help=("Pixel size of gridded DEM, Intensity, and maxH output layers (metres). " +
+              "Default: %(default)s."))
+    parser.add_argument("--tile_s", type=float, required=True,
+        help="XY dimensions of LAS tile in metres.")
+    parser.add_argument("--startfilenum", default=0, type=int,
+        help="Position within laz_flist to start batch processing. Default: %(default)s.")
+    parser.add_argument("--stopfilenum", type=int,
+        help="Position within laz_flist to stop batch processing.")
 
     return parser.parse_args(inputargs)
 
@@ -80,7 +63,8 @@ def run_dem_correction(cmdargs):
     Perform DEM infill for missing areas in LAS files.
 
     Parameters:
-        cmdargs (argparse.Namespace): Parsed command-line arguments containing input directory, file list, and processing parameters.
+        cmdargs (argparse.Namespace): Parsed command-line arguments containing input directory,
+                                      file list, and processing parameters.
     """
     # Read input file list
     fn = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)

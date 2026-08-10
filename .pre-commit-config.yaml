@@ -14,12 +14,10 @@ repos:
       - id: detect-private-key
 
   # Python code formatting
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.1
+  - repo: https://github.com/pycqa/flake8
+    rev: '7.1.0'
     hooks:
-      - id: ruff
-        args: [--fix]
-      - id: ruff-format
+    -   id: flake8
 
   # Type checking (optional but recommended)
   - repo: https://github.com/pre-commit/mirrors-mypy
