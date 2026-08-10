@@ -14,6 +14,9 @@ from osgeo import gdal, osr
 # from airborne-ls import
 
 
+gdal.UseExceptions()
+
+
 ###################################################################################################
 
 
