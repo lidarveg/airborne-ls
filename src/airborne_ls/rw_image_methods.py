@@ -14,21 +14,14 @@ from osgeo import gdal, osr
 # from airborne-ls import
 
 
+gdal.UseExceptions()
+
+
 ###################################################################################################
 
 
-def writeImage(
-    image,
-    outfile,
-    cmdargs,
-    driver="GTiff",
-    tlx=0.0,
-    tly=0.0,
-    binsize=0.0,
-    epsg=None,
-    nullVal=None,
-    parent_file=None,
-):
+def writeImage(image, outfile, cmdargs, driver="GTiff", tlx=0.0, tly=0.0,
+               binsize=0.0, epsg=None, nullVal=None, parent_file=None):
     """
     Write data to a GDAL supported image file format
 
