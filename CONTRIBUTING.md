@@ -53,4 +53,4 @@ No sensitive government data is included.
 You are authorized by your manager to contribute to this open project.
 
 ### Code Style
-We use Ruff for Python formatting. Please run `ruff check .` before submitting your MR. Our CI/CD pipeline will also check this automatically.
+We use flake8 for Python syntax checking and basic style checks. Please run the `flake8` command from the top of the repository before submitting your MR. Our CI/CD pipeline will also check this automatically.
