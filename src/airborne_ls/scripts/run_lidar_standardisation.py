@@ -167,16 +167,13 @@ def run_las_standardisation(cmdargs):
 
         # Calculate northing and easting
         northing = int(
-            np.ceil(np.median(data.y[data.y > 0]) / input_tileS) * input_tileS
-        )
+            np.ceil(np.median(data.y[data.y > 0]) / input_tileS) * input_tileS)
         easting = int(
-            np.floor(np.median(data.x[data.x > 0]) / input_tileS) * input_tileS
-        )
+            np.floor(np.median(data.x[data.x > 0]) / input_tileS) * input_tileS)
 
         # Update filename base with northing and easting
         fn_base = fn_base.replace("EASTING_UL", str(int(easting))).replace(
-            "NORTHING_UL", str(int(northing))
-        )
+            "NORTHING_UL", str(int(northing)))
 
         # Update filename with zone code
         pts = fn_base.split("_")
@@ -185,27 +182,15 @@ def run_las_standardisation(cmdargs):
         # outfn = str(Path(cmdargs.outdr).joinpath(fn_base))
 
         # Check if tile size and bin size are divisible
-        test = abs(
-            ((input_tileS // cmdargs.binSize) * cmdargs.binSize)
-            - ((input_tileS / cmdargs.binSize) * cmdargs.binSize)
-        )
-        if test >= 1.0:
+        if (input_tileS % cmdargs.binSize) != 0.0:
             raise ValueError(
                 f"Laz tile size and binSize are not divisible: {input_tileS} and {cmdargs.binSize}"
             )
 
         # Run chunked LAS filtering
-        _ = lazfile_rw.standardise_lasf(
-            fn_base,
-            cmdargs.outdr,
-            data,
-            easting,
-            northing,
-            input_tileS,
-            cmdargs.out_tile_s,
-            cmdargs.binSize,
-            fn,
-        )
+        _ = lazfile_rw.standardise_lasf(fn_base, cmdargs.outdr, data,
+                easting, northing, input_tileS, cmdargs.out_tile_s,
+                cmdargs.binSize, fn)
 
         del data
 
