@@ -182,11 +182,7 @@ def run_las_standardisation(cmdargs):
         # outfn = str(Path(cmdargs.outdr).joinpath(fn_base))
 
         # Check if tile size and bin size are divisible
-        test = abs(
-            ((input_tileS // cmdargs.binSize) * cmdargs.binSize)
-            - ((input_tileS / cmdargs.binSize) * cmdargs.binSize)
-        )
-        if test >= 1.0:
+        if (input_tileS % cmdargs.binSize) != 0.0:
             raise ValueError(
                 f"Laz tile size and binSize are not divisible: {input_tileS} and {cmdargs.binSize}"
             )
