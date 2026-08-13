@@ -361,17 +361,9 @@ def run_tile_products(cmdargs):
                                 )
                                 if np.sum(vals) > 5:
                                     chmVeg = gridding_methods.chm_alg(
-                                        chunk[vals],
-                                        chunk_hag[vals],
-                                        maxH_hag,
-                                        cmdargs.chm_psize,
-                                        xst_bin,
-                                        yst_bin,
-                                        binSize,
-                                        nRows_chm,
-                                        nCols_chm,
-                                        nullVal,
-                                    )
+                                        chunk[vals], chunk_hag[vals], maxH_hag,
+                                        cmdargs.chm_psize, xst_bin, yst_bin,
+                                        binSize, nRows_chm, nCols_chm, nullVal)
                                     chmTile[
                                         yst_chm : (yst_chm + nRows_chm),
                                         xst_chm : (xst_chm + nRows_chm),
