@@ -63,17 +63,8 @@ def fpcGridding(row, col, hgt, wgt, fpc, canopyThreshold):
         fpc[1, row[p], col[p]] += wgt[p]
 
 
-def doFPC(
-    xMin,
-    yMax,
-    data,
-    flightLines,
-    heightAboveGround,
-    fpc_size,
-    tile_s,
-    split_fpc,
-    canopyThreshold,
-):
+def doFPC(xMin, yMax, data, flightLines, heightAboveGround, fpc_size, tile_s,
+        split_fpc, canopyThreshold):
     """
     Calculates FPC as the proportion of weighted returns above the canopy threshold.
     FPC is calculated separately for different flight lines and combined using the mean.
