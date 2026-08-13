@@ -150,7 +150,7 @@ def run_tile_products(cmdargs):
         cmdargs (Namespace): Parsed command-line arguments containing processing parameters.
     """
     # Check if the supplied pixel sizes are divisible
-    _ = check_divisible([cmdargs.psize, cmdargs.ptile_s, cmdargs.fpc_psize])
+    check_divisible([cmdargs.psize, cmdargs.ptile_s, cmdargs.fpc_psize])
 
     # Read the list of LAS/LAZ files and extract the batch subset
     with open(Path(cmdargs.indir).joinpath(cmdargs.laz_flist)) as f:
@@ -588,15 +588,15 @@ def check_divisible(psizes):
 
     for loc, psize in enumerate(psizes):
         if psize <= 1.0:
-            if ((1.0 / psize) - (1.0 // psize)) > 0:
+            if (1.0 % psize) != 0:
                 msg = f"error: cmdargs.{pName[loc]} {psize} not divisible"
                 sys.exit(msg)
         elif psize <= 10.0:
-            if ((10.0 / psize) - (10.0 // psize)) > 0:
+            if (10.0 % psize) != 0:
                 msg = f"error: cmdargs.{pName[loc]} {psize} not divisible"
                 sys.exit(msg)
         else:
-            if ((100.0 / psize) - (100.0 // psize)) > 0:
+            if (100.0 % psize) != 0:
                 msg = f"error: cmdargs.{pName[loc]} {psize} not divisible"
                 sys.exit(msg)
 
