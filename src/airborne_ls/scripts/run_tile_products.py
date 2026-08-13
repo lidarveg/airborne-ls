@@ -251,22 +251,20 @@ def run_tile_products(cmdargs):
                         # run dem
                         grdhits = chunk["CLASSIFICATION"] == 2
                         if np.sum(grdhits) > 10:
+                            # Set up a slice object for the part of the main tile arrays
+                            # covering the current bin. Applies only to arrays of tileShape
+                            xst = int(int((rowB - 1) * binSize) / cmdargs.psize)
+                            yst = int(int((rowS - colB) * binSize) / cmdargs.psize)
+                            binSlice = (slice(yst, (yst + nRows)), slice(xst, (xst + nRows)))
+
                             xst_bin = easting + int((rowB - 1) * binSize)
                             yst_bin = northing - int((rowS - colB) * binSize)
                             if np.sum(grdhits) > 0:
                                 dem = gridding_methods.makeDemTile(
-                                    chunk["X"][grdhits],
-                                    chunk["Y"][grdhits],
-                                    chunk["Z"][grdhits],
-                                    xst_bin,
-                                    yst_bin,
-                                    binSize,
-                                    cmdargs.psize,
-                                    nullVal=nullVal,
-                                )
-                                xst = int(int((rowB - 1) * binSize) / cmdargs.psize)
-                                yst = int(int((rowS - colB) * binSize) / cmdargs.psize)
-                                demTile[yst : (yst + nRows), xst : (xst + nRows)] = dem
+                                    chunk["X"][grdhits], chunk["Y"][grdhits],
+                                    chunk["Z"][grdhits], xst_bin, yst_bin, binSize,
+                                    cmdargs.psize, nullVal=nullVal)
+                                demTile[binSlice] = dem
 
                             #######################################################################
                             # run csm
@@ -274,18 +272,11 @@ def run_tile_products(cmdargs):
                                 chunk["X"], chunk["Y"], chunk["Z"], cmdargs.psize
                             )
                             csm = gridding_methods.makeDemTile(
-                                xValsA,
-                                yValsA,
-                                zValsA,
-                                xst_bin,
-                                yst_bin,
-                                binSize,
-                                cmdargs.psize,
-                                nullVal=nullVal,
-                            )
+                                xValsA, yValsA, zValsA, xst_bin, yst_bin,
+                                binSize, cmdargs.psize, nullVal=nullVal)
                             csm = csm - dem
                             csm[dem == nullVal] = nullVal
-                            csmTile[yst : (yst + nRows), xst : (xst + nRows)] = csm
+                            csmTile[binSlice] = csm
                             csmTile[csmTile < -5] = np.nan
                             #######################################################################
                             # interp to irregular grid
@@ -295,24 +286,14 @@ def run_tile_products(cmdargs):
                             #     binChunk["CLASSIFICATION"] == 2,)
 
                             heightAboveGround = (
-                                gridding_methods.createHeightAboveGround(
-                                    nonGround,
-                                    binChunk["X"],
-                                    binChunk["Y"],
-                                    binChunk["Z"],
-                                    chunk["X"][grdhits],
-                                    chunk["Y"][grdhits],
-                                    chunk["Z"][grdhits],
-                                )
+                                gridding_methods.createHeightAboveGround(nonGround,
+                                    binChunk["X"], binChunk["Y"], binChunk["Z"],
+                                    chunk["X"][grdhits], chunk["Y"][grdhits], chunk["Z"][grdhits])
                             )
 
                             (row, col) = gridding_methods.xyToRowCol(
-                                binChunk["X"],
-                                binChunk["Y"],
-                                xst_bin,
-                                yst_bin,
-                                cmdargs.psize,
-                            )
+                                binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
+                                cmdargs.psize)
                             pntIntensity = binChunk["INTENSITY"]
                             # pntClass = binChunk["CLASSIFICATION"]
                             zArr = np.zeros((nRows, nCols), dtype=np.float32) + nullVal
@@ -332,30 +313,16 @@ def run_tile_products(cmdargs):
                             )
 
                             gridding_methods.maxH_workflow_layers(
-                                row,
-                                col,
-                                binChunk["X"],
-                                binChunk["Y"],
-                                heightAboveGround,
-                                pntIntensity,
+                                row, col, binChunk["X"], binChunk["Y"],
+                                heightAboveGround, pntIntensity,
                                 binChunk["CLASSIFICATION"],
-                                xArr,
-                                yArr,
-                                zArr,
-                                intensityAtMaxH,
-                                nonGroundClasses,
-                                haveGroundReturn,
-                            )
-                            maxhTile[yst : (yst + nRows), xst : (xst + nRows)] = zArr
-                            intensTile[yst : (yst + nRows), xst : (xst + nRows)] = (
-                                intensityAtMaxH
-                            )
-                            grTile[yst : (yst + nRows), xst : (xst + nRows)] = (
-                                haveGroundReturn
-                            )
-                            non_grTile[yst : (yst + nRows), xst : (xst + nRows)] = (
-                                nonGroundClasses
-                            )
+                                xArr, yArr, zArr, intensityAtMaxH,
+                                nonGroundClasses, haveGroundReturn)
+
+                            maxhTile[binSlice] = zArr
+                            intensTile[binSlice] = intensityAtMaxH
+                            grTile[binSlice] = haveGroundReturn
+                            non_grTile[binSlice] = nonGroundClasses
 
                             #######################################################################
                             # CREATE Canopy Height Model
@@ -367,12 +334,8 @@ def run_tile_products(cmdargs):
                             )  # could drop / add classification value of 3
                             if number_veg_rets > 10:
                                 (row_chm, col_chm) = gridding_methods.xyToRowCol(
-                                    binChunk["X"],
-                                    binChunk["Y"],
-                                    xst_bin,
-                                    yst_bin,
-                                    cmdargs.chm_psize,
-                                )
+                                    binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
+                                    cmdargs.chm_psize)
                                 nRows_chm = int(np.ceil(binSize / cmdargs.chm_psize))
                                 nCols_chm = int(np.ceil(binSize / cmdargs.chm_psize))
                                 xst_chm = int(
@@ -390,14 +353,8 @@ def run_tile_products(cmdargs):
                                     chunk["CLASSIFICATION"] <= 5
                                 )  # this includes unclassified returns.. not sure of zero?
                                 chunk_hag = gridding_methods.createHeightAboveGround(
-                                    maxH_vals,
-                                    chunk["X"],
-                                    chunk["Y"],
-                                    chunk["Z"],
-                                    chunk["X"][grdhits],
-                                    chunk["Y"][grdhits],
-                                    chunk["Z"][grdhits],
-                                )
+                                    maxH_vals, chunk["X"], chunk["Y"], chunk["Z"],
+                                    chunk["X"][grdhits], chunk["Y"][grdhits], chunk["Z"][grdhits])
                                 vals = np.logical_and(
                                     chunk["CLASSIFICATION"] >= 3,
                                     chunk["CLASSIFICATION"] <= 5,
@@ -426,42 +383,22 @@ def run_tile_products(cmdargs):
                             fstR = binChunk["RETURN_NUMBER"] == 1
                             if np.sum(fstR) > 0:
                                 (row_1st, col_1st) = gridding_methods.xyToRowCol(
-                                    binChunk["X"][fstR],
-                                    binChunk["Y"][fstR],
-                                    xst_bin,
-                                    yst_bin,
-                                    cmdargs.psize,
-                                )
+                                    binChunk["X"][fstR], binChunk["Y"][fstR],
+                                    xst_bin, yst_bin, cmdargs.psize)
                                 gridding_methods.fstR_density(
-                                    row_1st,
-                                    col_1st,
-                                    binChunk["X"][fstR],
-                                    binChunk["Y"][fstR],
-                                    density,
-                                )
-                                ptDenTile[yst : (yst + nRows), xst : (xst + nRows)] = (
-                                    density
-                                )
+                                    row_1st, col_1st,
+                                    binChunk["X"][fstR], binChunk["Y"][fstR],
+                                    density)
+                                ptDenTile[binSlice] = density
                             ############################
                             # run percentiles
-                            (
-                                percentile_arr,
-                                nRows_pct,
-                            ) = gridding_methods.doHeightPercentileOutputs_idx(
-                                binChunk["X"],
-                                binChunk["Y"],
-                                xst_bin,
-                                yst_bin,
-                                binSize,
-                                heightAboveGround,
-                                cmdargs.ptile_s,
-                                pptiles=percentiles,
-                                nullVal=nullVal,
-                            )
+                            (percentile_arr, nRows_pct) = (
+                                gridding_methods.doHeightPercentileOutputs_idx(
+                                    binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
+                                    binSize, heightAboveGround, cmdargs.ptile_s,
+                                    pptiles=percentiles, nullVal=nullVal))
                             xst_pct = int(int((rowB - 1) * binSize) / cmdargs.ptile_s)
-                            yst_pct = int(
-                                int((rowS - colB) * binSize) / cmdargs.ptile_s
-                            )
+                            yst_pct = int(int((rowS - colB) * binSize) / cmdargs.ptile_s)
                             pctTile[
                                 :,
                                 yst_pct : (yst_pct + nRows_pct),
@@ -471,9 +408,7 @@ def run_tile_products(cmdargs):
                             ############################
                             # run FPC
                             xst_fpc = int(int((rowB - 1) * binSize) / cmdargs.fpc_psize)
-                            yst_fpc = int(
-                                int((rowS - colB) * binSize) / cmdargs.fpc_psize
-                            )
+                            yst_fpc = int(int((rowS - colB) * binSize) / cmdargs.fpc_psize)
                             nRows_fpc = int(np.ceil(binSize / cmdargs.fpc_psize))
                             # nCols_fpc = int(np.ceil(binSize / cmdargs.fpc_psize))
 
@@ -481,17 +416,9 @@ def run_tile_products(cmdargs):
                             canopyThreshold = 1.7
                             hag = heightAboveGround
 
-                            fpc = fpc_method.doFPC(
-                                xst_bin,
-                                yst_bin,
-                                binChunk,
-                                flightlines,
-                                hag,
-                                cmdargs.fpc_psize,
-                                binSize,
-                                cmdargs.split_fpc,
-                                canopyThreshold,
-                            )
+                            fpc = fpc_method.doFPC(xst_bin, yst_bin, binChunk,
+                                flightlines, hag, cmdargs.fpc_psize,
+                                binSize, cmdargs.split_fpc, canopyThreshold)
                             fpcTile[
                                 yst_fpc : (yst_fpc + nRows_fpc),
                                 xst_fpc : (xst_fpc + nRows_fpc),
@@ -502,26 +429,14 @@ def run_tile_products(cmdargs):
 
             rw_image_methods.writeImage(
                 np.round(demTile.astype(np.float32), 3),
-                outfnames["dem"],
-                cmdargs,
-                tlx=easting,
-                tly=northing,
-                binsize=cmdargs.psize,
-                epsg=cmdargs.epsg,
-                nullVal=nullVal,
-                parent_file=infileFull,
-            )
+                outfnames["dem"], cmdargs, tlx=easting, tly=northing,
+                binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=nullVal,
+                parent_file=infileFull)
             rw_image_methods.writeImage(
                 np.round(csmTile.astype(np.float32), 3),
-                outfnames["csm"],
-                cmdargs,
-                tlx=easting,
-                tly=northing,
-                binsize=cmdargs.psize,
-                epsg=cmdargs.epsg,
-                nullVal=nullVal,
-                parent_file=infileFull,
-            )
+                outfnames["csm"], cmdargs, tlx=easting, tly=northing,
+                binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=nullVal,
+                parent_file=infileFull)
             #######################
             # interpolating over buildings can be a problem - msk out affected pixels here
             multi = cmdargs.psize / cmdargs.chm_psize
@@ -539,95 +454,42 @@ def run_tile_products(cmdargs):
             chmTile[chmTile < 0.5] = nullVal
             rw_image_methods.writeImage(
                 np.round(chmTile.astype(np.float32), 3),
-                outfnames["chm"],
-                cmdargs,
-                tlx=easting,
-                tly=northing,
-                binsize=cmdargs.chm_psize,
-                epsg=cmdargs.epsg,
-                nullVal=nullVal,
-                parent_file=infileFull,
-            )
+                outfnames["chm"], cmdargs, tlx=easting, tly=northing,
+                binsize=cmdargs.chm_psize, epsg=cmdargs.epsg,
+                nullVal=nullVal, parent_file=infileFull)
             #########################
             rw_image_methods.writeImage(
                 np.round(maxhTile, 3),
-                outfnames["maxH"],
-                cmdargs,
-                tlx=easting,
-                tly=northing,
-                binsize=cmdargs.psize,
-                epsg=cmdargs.epsg,
-                nullVal=nullVal,
-                parent_file=infileFull,
-            )
+                outfnames["maxH"], cmdargs, tlx=easting, tly=northing,
+                binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=nullVal,
+                parent_file=infileFull)
             rw_image_methods.writeImage(
                 np.round(intensTile, 4),
-                outfnames["intens"],
-                cmdargs,
-                tlx=easting,
-                tly=northing,
-                binsize=cmdargs.psize,
-                epsg=cmdargs.epsg,
-                nullVal=nullVal,
-                parent_file=infileFull,
-            )
+                outfnames["intens"], cmdargs, tlx=easting, tly=northing,
+                binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=nullVal,
+                parent_file=infileFull)
             rw_image_methods.writeImage(
-                grTile,
-                outfnames["grdR"],
-                cmdargs,
-                tlx=easting,
-                tly=northing,
-                binsize=cmdargs.psize,
-                epsg=cmdargs.epsg,
-                nullVal=rtnClassNull,
-                parent_file=infileFull,
-            )
+                grTile, outfnames["grdR"], cmdargs, tlx=easting, tly=northing,
+                binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=rtnClassNull,
+                parent_file=infileFull)
             rw_image_methods.writeImage(
-                non_grTile,
-                outfnames["NonGrd_codes"],
-                cmdargs,
-                tlx=easting,
-                tly=northing,
-                binsize=cmdargs.psize,
-                epsg=cmdargs.epsg,
-                nullVal=rtnClassNull,
-                parent_file=infileFull,
-            )
+                non_grTile, outfnames["NonGrd_codes"], cmdargs,
+                tlx=easting, tly=northing, binsize=cmdargs.psize, epsg=cmdargs.epsg,
+                nullVal=rtnClassNull, parent_file=infileFull)
             rw_image_methods.writeImage(
-                ptDenTile,
-                outfnames["fst_dens"],
-                cmdargs,
-                tlx=easting,
-                tly=northing,
-                binsize=cmdargs.psize,
-                epsg=cmdargs.epsg,
-                nullVal=0,
-                parent_file=infileFull,
-            )
+                ptDenTile, outfnames["fst_dens"], cmdargs,
+                tlx=easting, tly=northing, binsize=cmdargs.psize,
+                epsg=cmdargs.epsg, nullVal=0, parent_file=infileFull)
             for idx, pp in enumerate(percentiles):
                 layer = pctTile[idx, :, :]
                 rw_image_methods.writeImage(
-                    layer,
-                    outfnames["ptiles"][idx],
-                    cmdargs,
-                    tlx=easting,
-                    tly=northing,
-                    binsize=cmdargs.ptile_s,
-                    epsg=cmdargs.epsg,
-                    nullVal=nullVal,
-                    parent_file=infileFull,
-                )
+                    layer, outfnames["ptiles"][idx], cmdargs, tlx=easting, tly=northing,
+                    binsize=cmdargs.ptile_s, epsg=cmdargs.epsg, nullVal=nullVal,
+                    parent_file=infileFull)
             rw_image_methods.writeImage(
-                np.rint(fpcTile).astype(np.uint8),
-                outfnames["fpc"],
-                cmdargs,
-                tlx=easting,
-                tly=northing,
-                binsize=cmdargs.fpc_psize,
-                epsg=cmdargs.epsg,
-                nullVal=rtnClassNull,
-                parent_file=infileFull,
-            )
+                np.rint(fpcTile).astype(np.uint8), outfnames["fpc"], cmdargs,
+                tlx=easting, tly=northing, binsize=cmdargs.fpc_psize, epsg=cmdargs.epsg,
+                nullVal=rtnClassNull, parent_file=infileFull)
             applyFPCcolor(outfnames["fpc"])
             logger.info(f"Tiles written to file {infileFull}")
 
