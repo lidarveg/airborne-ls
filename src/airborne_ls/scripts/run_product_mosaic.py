@@ -123,11 +123,8 @@ def runMerge(cmdargs):
         fn_dict["instrument"],
     )
     psizes = filenaming_methods.get_psizeDict(
-        psize=cmdargs.psize,
-        ptile_s=cmdargs.ptile_s,
-        fpc_psize=cmdargs.fpc_psize,
-        chm_psize=cmdargs.chm_psize,
-    )
+        psize=cmdargs.psize, ptile_s=cmdargs.ptile_s,
+        fpc_psize=cmdargs.fpc_psize, chm_psize=cmdargs.chm_psize)
     missing_tiles = []
     temp_output = Path(cmdargs.indir).joinpath("temp_output")
     os.makedirs(temp_output, exist_ok=True)
@@ -143,13 +140,9 @@ def runMerge(cmdargs):
                 tileBasename = (fn).split(".")[0]
                 outputBasename = os.path.join(outputDir, tileBasename)
                 fnames = filenaming_methods.get_outfnames(
-                    outputBasename,
-                    psize=cmdargs.psize,
-                    ptile_s=cmdargs.ptile_s,
-                    fpc_psize=cmdargs.fpc_psize,
-                    chm_psize=cmdargs.chm_psize,
-                    pptiles=PERCENTILES,
-                )
+                    outputBasename, psize=cmdargs.psize, ptile_s=cmdargs.ptile_s,
+                    fpc_psize=cmdargs.fpc_psize, chm_psize=cmdargs.chm_psize,
+                    pptiles=PERCENTILES)
 
                 if (stagec_def[outStage]).endswith("percentile"):
                     num = int(((stagec_def[outStage]).split("_"))[0])
@@ -229,9 +222,8 @@ def runMerge(cmdargs):
 
         # Move vrt_filename (the VRT file) to temp folder
         vrt_filename_basename = vrt_filename.name  # Get the filename
-        vrt_temp_path = (
-            temp_output / vrt_filename_basename
-        )  # Construct the destination path
+        # Construct the destination path
+        vrt_temp_path = temp_output / vrt_filename_basename
         vrt_filename.rename(vrt_temp_path)  # Move the file
         vrt_filename = vrt_temp_path
 
