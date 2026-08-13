@@ -97,17 +97,8 @@ def laspy2rec(infile):
 
 
 ###################################################################################################
-def standardise_lasf(
-    fn_base,
-    outdr,
-    data,
-    easting,
-    northing,
-    tile_s,
-    out_tile_s,
-    binSize,
-    filename_Parent,
-):
+def standardise_lasf(fn_base, outdr, data, easting, northing, tile_s, out_tile_s,
+        binSize, filename_Parent):
     """
     Using laspy, rename file using naming convention, add index, remove noise and write out
     supplied files to .laz
