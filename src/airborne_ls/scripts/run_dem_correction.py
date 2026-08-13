@@ -156,15 +156,8 @@ def run_dem_correction(cmdargs):
 
                 rw_image_methods.writeImage(
                     np.round(res.astype(np.float32), 3),
-                    outfile,
-                    cmdargs,
-                    tlx=h["tlx"],
-                    tly=h["tly"],
-                    binsize=h["pixel_s"],
-                    epsg=cmdargs.epsg,
-                    nullVal=nullVal,
-                    parent_file=infileFull,
-                )
+                    outfile, cmdargs, tlx=h["tlx"], tly=h["tly"], binsize=h["pixel_s"],
+                    epsg=cmdargs.epsg, nullVal=nullVal, parent_file=infileFull)
                 tif2cog(outfile, outf_cog)
 
                 # Recreate hillshade
