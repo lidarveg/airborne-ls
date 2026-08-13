@@ -20,20 +20,14 @@ def makeDem(xVals, yVals, zVals, header, tile_s, psize, nullVal=-999.0):
     """
     nRows = int(np.ceil(tile_s / psize))
     pxlCoords = get_grid(nRows, header.x_min, header.y_max + 1, psize)
-    dem = pynninterp.NaturalNeighbour(
-        xVals,
-        yVals,
-        zVals,
-        pxlCoords[0].astype(np.float64),
-        pxlCoords[1].astype(np.float64),
-    )
+    dem = pynninterp.NaturalNeighbour(xVals, yVals, zVals,
+        pxlCoords[0].astype(np.float64), pxlCoords[1].astype(np.float64))
     dem[np.isnan(dem)] = nullVal
     return dem
 
 
-def makeDemTile(
-    xVals, yVals, zVals, x_min, y_max, tile_s, psize, nullVal=-999.0, Linear=False
-):
+def makeDemTile(xVals, yVals, zVals, x_min, y_max, tile_s, psize,
+        nullVal=-999.0, Linear=False):
     """
     Interpolate the ground returns on a regular grid to make a DEM image.
     """
@@ -46,21 +40,11 @@ def makeDemTile(
     zVals = np.round(zVals, 2)
 
     if Linear:
-        dem = pynninterp.Linear(
-            xVals,
-            yVals,
-            zVals,
-            pxlCoords[0].astype(np.float64),
-            pxlCoords[1].astype(np.float64),
-        )
+        dem = pynninterp.Linear(xVals, yVals, zVals,
+            pxlCoords[0].astype(np.float64), pxlCoords[1].astype(np.float64))
     else:
-        dem = pynninterp.NaturalNeighbour(
-            xVals,
-            yVals,
-            zVals,
-            pxlCoords[0].astype(np.float64),
-            pxlCoords[1].astype(np.float64),
-        )
+        dem = pynninterp.NaturalNeighbour(xVals, yVals, zVals,
+            pxlCoords[0].astype(np.float64), pxlCoords[1].astype(np.float64))
 
     dem[np.isnan(dem)] = nullVal
     return dem
@@ -73,13 +57,8 @@ def interpPoints(xVals, yVals, zVals, x_min, y_max, tile_s, psize, nullVal=-999.
     nRows = int(np.ceil(tile_s / psize))
     pxlCoords = get_grid(nRows, x_min, y_max + 1, psize)
 
-    dem = pynninterp.NaturalNeighbour(
-        xVals,
-        yVals,
-        zVals,
-        pxlCoords[0].astype(np.float64),
-        pxlCoords[1].astype(np.float64),
-    )
+    dem = pynninterp.NaturalNeighbour(xVals, yVals, zVals,
+        pxlCoords[0].astype(np.float64), pxlCoords[1].astype(np.float64))
 
     dem[np.isnan(dem)] = nullVal
     return dem
@@ -159,21 +138,8 @@ def circleLocs(radius):
 
 ###################################################################################################
 @jit
-def maxH_workflow_layers(
-    row,
-    col,
-    x,
-    y,
-    z,
-    intensity,
-    classi,
-    xArr,
-    yArr,
-    zArr,
-    intensityAtMaxH,
-    nonGroundClasses,
-    haveGroundReturn,
-):
+def maxH_workflow_layers(row, col, x, y, z, intensity, classi,
+        xArr, yArr, zArr, intensityAtMaxH, nonGroundClasses, haveGroundReturn):
     """
     Compute the maximum height grid and associated x, y locations from a LiDAR point cloud as
     2D arrays.
@@ -378,16 +344,8 @@ def count_fstR(row, col, density):
 
 
 ###################################################################################################
-def doHeightPercentileOutputs(
-    x,
-    y,
-    xMin,
-    yMax,
-    heightAboveGround,
-    tile_s,
-    psize,
-    pptiles=(1, 5, 25, 50, 75, 95, 99),
-):
+def doHeightPercentileOutputs(x, y, xMin, yMax, heightAboveGround, tile_s, psize,
+        pptiles=(1, 5, 25, 50, 75, 95, 99)):
     """
     Generate gridded outputs of height percentiles.
 
@@ -433,17 +391,8 @@ def doHeightPercentileOutputs(
     return percentile_arr
 
 
-def doHeightPercentileOutputs_idx(
-    x,
-    y,
-    xst_bin,
-    yst_bin,
-    binSize,
-    heightAboveGround,
-    ptile_s,
-    pptiles=(1, 5, 25, 50, 75, 95, 99),
-    nullVal=-999.0,
-):
+def doHeightPercentileOutputs_idx(x, y, xst_bin, yst_bin, binSize, heightAboveGround,
+        ptile_s, pptiles=(1, 5, 25, 50, 75, 95, 99), nullVal=-999.0):
     """
     Generate gridded outputs of height percentiles using bin indices.
 
@@ -534,9 +483,8 @@ def dem_infill(dem, codes, nullVal=-999.0, minElev=-4):
 
     # Identify bad values below the minimum elevation
     bad_vals = dem < minElev
-    if (
-        np.sum(bad_vals) > 3 and np.max(dem) > minElev
-    ):  # Only proceed if there are enough bad values
+    # Only proceed if there are enough bad values
+    if (np.sum(bad_vals) > 3 and np.max(dem) > minElev):
         # Ensure there are valid values to interpolate from
         # Get valid elevation points above the minimum elevation
         valid_indices = np.argwhere(dem > minElev)
@@ -549,13 +497,8 @@ def dem_infill(dem, codes, nullVal=-999.0, minElev=-4):
         pxlCoords = get_grid(nRows, 0, ny, 1.0)  # Generate linear grid
 
         # Perform natural neighbour interpolation
-        dem2 = pynninterp.Linear(
-            xVals,
-            yVals,
-            zVals,
-            pxlCoords[0].astype(np.float64),
-            pxlCoords[1].astype(np.float64),
-        )
+        dem2 = pynninterp.Linear(xVals, yVals, zVals,
+            pxlCoords[0].astype(np.float64), pxlCoords[1].astype(np.float64))
         dem2 = dem2[0:ny, 0:nx]
         dem2 = np.copy(dem2[::-1, :])  # Flip vertically
 
@@ -576,19 +519,8 @@ def dem_infill(dem, codes, nullVal=-999.0, minElev=-4):
 
 ###################################################################################################
 # CSM
-def chm_alg(
-    chunk,
-    chunk_hag,
-    maxH_hag,
-    psize,
-    xst_bin,
-    yst_bin,
-    binSize,
-    nRows,
-    nCols,
-    nullVal,
-    minH_thres=1.0,
-):
+def chm_alg(chunk, chunk_hag, maxH_hag, psize, xst_bin, yst_bin, binSize, nRows, nCols,
+        nullVal, minH_thres=1.0):
     """
     Modified version of the pit-free algorithm for generating a Canopy Height Model (CHM).
 
@@ -638,17 +570,8 @@ def chm_alg(
             data_sub = chunk[vals]
 
             # Create a DEM tile for the current height increment
-            csm = makeDemTile(
-                data_sub["X"],
-                data_sub["Y"],
-                data_sub["Z"],
-                xst_bin,
-                yst_bin,
-                binSize,
-                psize,
-                nullVal=0,
-                Linear=True,
-            )
+            csm = makeDemTile(data_sub["X"], data_sub["Y"], data_sub["Z"],
+                xst_bin, yst_bin, binSize, psize, nullVal=0, Linear=True)
 
             # Create a mask for areas above the current height increment
             msk = maxH_hag >= inc
