@@ -86,7 +86,6 @@ def run_dem_correction(cmdargs):
     img_size_metres = int(cmdargs.tile_s)
     img_size_pixels = int(img_size_metres / cmdargs.psize)
     realD_thres = -10.0  # Minimum valid DEM value
-    resolution = f"r{int(cmdargs.psize * 100)}cm"
 
     demProduct = "dem"
     demfileList = getDemImageFiles(infilesFull, demProduct)
@@ -149,23 +148,20 @@ def run_dem_correction(cmdargs):
 
             # Save the infilled DEM if it contains valid data
             if np.max(res) > realD_thres:
-                outf_fn = demf.replace("dem", "dem_infilled")
-                outf_cog = outf_fn
-                outfile = str(outf_fn).replace(Path(outf_fn).suffix, "_temp.tif")
-                h = rw_image_methods.imgH(demf)
+                outDemfile = qvf.setoptionfield(demfile, 'l', "demInfilled")
+                hillshadeProduct = "demHS"
+                hillshadeStage = filenaming_methods.stageByProductName[hillshadeProduct]
+                outDemHSfile = qvf.setstagecode(demfile, hillshadeStage)
+                outDemHSfile = qvf.setoptionfield(outDemHSfile, 'l', hillshadeProduct)
+                h = rw_image_methods.imgH(demfile)
                 res[res < realD_thres] = nullVal
 
                 rw_image_methods.writeImage(
                     np.round(res.astype(np.float32), 3),
-                    outfile, cmdargs, tlx=h["tlx"], tly=h["tly"], binsize=h["pixel_s"],
-                    epsg=cmdargs.epsg, nullVal=nullVal, parent_file=infileFull)
-                tif2cog(outfile, outf_cog)
+                    outDemfile, cmdargs, tlx=h["tlx"], tly=h["tly"], binsize=h["pixel_s"],
+                    epsg=cmdargs.epsg, nullVal=nullVal)
 
-                # Recreate hillshade
-                demHS_cog = f"{cmdargs.indir}/{base}/{base}_bbi_demHS_{resolution}.tif"
-                outfile_HS = str(demHS_cog).replace(Path(demHS_cog).suffix, "_temp.tif")
-
-                args = ["gdaldem", "hillshade", outfile, outfile_HS, "-compute_edges"]
+                args = ["gdaldem", "hillshade", outDemfile, outDemHSfile, "-compute_edges"]
                 proc = subprocess.Popen(
                     args, stdout=subprocess.PIPE, stderr=subprocess.PIPE
                 )
@@ -176,12 +172,6 @@ def run_dem_correction(cmdargs):
                 else:
                     print(stdout.decode("utf-8"))
                     print(stderr.decode("utf-8"))
-
-                tif2cog(outfile_HS, demHS_cog)
-
-                # Clean up temporary files
-                Path(outfile).unlink()
-                Path(outfile_HS).unlink()
 
 
 def getDemImageFiles(infilesFull, productName):
