@@ -42,6 +42,7 @@ import logging
 import os
 
 import numpy as np
+from osgeo import gdal
 
 from airborne_ls import qvf
 
@@ -225,7 +226,7 @@ def resolutionStrFromMetres(metres):
 
 
 def get_outfnames(outputBasename, psize=0.5, ptile_s=5, fpc_psize=10, chm_psize=0.2,
-        pptiles=(1, 5, 25, 50, 75, 95, 99)):
+        pptiles=(1, 5, 25, 50, 75, 95, 99), driverName='GTiff'):
     """
     Generate filenames for individually processed tiles and intermediate products.
 
@@ -264,10 +265,21 @@ def get_outfnames(outputBasename, psize=0.5, ptile_s=5, fpc_psize=10, chm_psize=
             resStr = pcntileRes
 
         outfile = qvf.setoptionfield(outfile, 'r', resStr)
+        suffix = getSuffixFromDriverName(driverName)
+        outfile = qvf.setsuffix(outfile, suffix)
         fnames[productName] = outfile
 
     # Return the filenames dictionary
     return fnames
+
+
+def getSuffixFromDriverName(driverName):
+    """
+    Get the preferred suffix for the given GDAL driver name
+    """
+    drvr = gdal.GetDriverByName(driverName)
+    suffix = drvr.GetMetadataItem('DMD_EXTENSION')
+    return suffix
 
 
 def createTileDict(tile, tile_s):
