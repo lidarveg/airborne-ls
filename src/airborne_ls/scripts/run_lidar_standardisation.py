@@ -205,45 +205,6 @@ def reorder_flist(lazlistfull):
     return np.array(lazlistfull)[sorted_indices]
 
 
-def get_fn_base(cmdargs):
-    """
-    Build the filename base, which will have the northing and easting updated.
-
-    Stages defined as:
-        - ba0: Ellipsoid heights
-        - ba1: Geoid heights (AHD)
-        - ba3: New indexed LAS
-
-    Parameters:
-        cmdargs (argparse.Namespace): Parsed command-line arguments.
-
-    Returns:
-        tuple: Filename base, ba3 filename, and zone code.
-    """
-    zone = str(cmdargs.epsg)[-1:]
-    zone_code = str(cmdargs.epsg)[-2:]
-
-    easting_ul = "EASTING_UL"
-    northing_ul = "NORTHING_UL"
-
-    # Determine zone prefix
-    if 28350 < cmdargs.epsg < 28360:
-        zone_prefix = "m"
-    elif 7850 < cmdargs.epsg < 7860:
-        zone_prefix = "d"
-    else:
-        raise ValueError(f"Unknown EPSG code: {cmdargs.epsg}")
-
-    # Build filename base
-    fn_what = f"{cmdargs.ss}{cmdargs.ii}{cmdargs.pp}"
-    fn_where = f"x{easting_ul}ys{northing_ul}"
-    fn_when = f"{cmdargs.year}_ba1{zone_prefix}{zone}_p{cmdargs.proj}.laz"
-    fn_base = f"{fn_what}_{fn_where}_{fn_when}"
-    ba3 = f"{fn_what}_r{cmdargs.proj}_{cmdargs.year}_ba3{zone_prefix}{zone}.zip"
-
-    return fn_base, ba3, zone_code
-
-
 def check_input_fns(indir, infilelist):
     """
     Check whether input files are valid and are .laz or .las files.
