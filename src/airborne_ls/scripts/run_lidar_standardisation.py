@@ -33,6 +33,7 @@ from pathlib import Path
 
 import laspy
 import numpy as np
+from osgeo import osr
 
 from airborne_ls import lazfile_rw
 
@@ -40,6 +41,7 @@ logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.ERROR, format="%(asctime)s: %(name)20s: %(levelname)10s: %(message)s"
 )
+osr.UseExceptions()
 
 
 def getCmdargs(inputargs):
@@ -129,11 +131,14 @@ def getCmdargs(inputargs):
     if not Path(cmdargs.outdr).exists():
         raise AssertionError("Output directory does not exist.")
 
-    # required_args = ['year', 'epsg','tile_s',]
-    # for argname in required_args:
-    #     arg = cmdargs.__dict__.get(argname)
-    #     if arg is None:
-    #         raise argparse.ArgumentError(None, f"argument '--{argname}' is mandatory")
+    if (cmdargs.tile_s % cmdargs.out_tile_s) != 0:
+        msg = (f"Input tile size {cmdargs.tile_s} not divisible by " +
+               f"output tile size {cmdargs.out_tile_s}")
+        raise ValueError(msg)
+
+    if (cmdargs.out_tile_s % cmdargs.binSize) != 0:
+        msg = f"Output tile size {cmdargs.out_tile_s} not divisible by bin size {cmdargs.binSize}"
+        raise ValueError(msg)
 
     return cmdargs
 
@@ -158,12 +163,18 @@ def run_las_standardisation(cmdargs):
 
     input_tileS = cmdargs.tile_s
 
-    # Generate the filename base
-    fn_base, ba3, zone_code = get_fn_base(cmdargs)  # noqa
+    what = f"{cmdargs.ss}{cmdargs.ii}{cmdargs.pp}"
+    when = f"{cmdargs.year}"
+    srs = osr.SpatialReference(epsg=cmdargs.epsg)
+    utmZone = srs.GetUTMZone()
+    if utmZone == 0:
+        msg = f"Unknown EPSG {cmdargs.epsg}. Cannot translate to filename zone code"
+        raise ValueError(msg)
+    stageCode = getStageCode(cmdargs)
 
-    for fn in lazlistfull:
-        print(f"Processing LAS/LAZ file: {fn}")
-        data = laspy.read(fn)
+    for inLazfile in lazlistfull:
+        print(f"Processing LAS/LAZ file: {inLazfile}")
+        data = laspy.read(inLazfile)
 
         # Calculate northing and easting
         northing = int(
@@ -171,26 +182,10 @@ def run_las_standardisation(cmdargs):
         easting = int(
             np.floor(np.median(data.x[data.x > 0]) / input_tileS) * input_tileS)
 
-        # Update filename base with northing and easting
-        fn_base = fn_base.replace("EASTING_UL", str(int(easting))).replace(
-            "NORTHING_UL", str(int(northing)))
-
-        # Update filename with zone code
-        pts = fn_base.split("_")
-        fn_where = f"x{easting}ys{northing}z{zone_code}"
-        fn_base = "_".join([pts[0], fn_where, pts[2], pts[3], pts[4]])
-        # outfn = str(Path(cmdargs.outdr).joinpath(fn_base))
-
-        # Check if tile size and bin size are divisible
-        if (input_tileS % cmdargs.binSize) != 0.0:
-            raise ValueError(
-                f"Laz tile size and binSize are not divisible: {input_tileS} and {cmdargs.binSize}"
-            )
-
         # Run chunked LAS filtering
-        _ = lazfile_rw.standardise_lasf(fn_base, cmdargs.outdr, data,
-                easting, northing, input_tileS, cmdargs.out_tile_s,
-                cmdargs.binSize, fn)
+        _ = lazfile_rw.standardise_lasf(what, when, utmZone, stageCode,
+                cmdargs.proj, cmdargs.outdr, data, easting, northing, input_tileS,
+                cmdargs.out_tile_s, cmdargs.binSize, inLazfile)
 
         del data
 
@@ -282,6 +277,19 @@ def check_input_fns(indir, infilelist):
             flist.append(fn)
 
     return flist, len(flist) == laz_count
+
+
+def getStageCode(cmdargs):
+    """
+    Get the output stage code from the given command line arguments
+    """
+    # At the moment, it is always ba1, but in principle this depends on the
+    # height datum in use, which will eventually be given on the command line
+    # Stages defined as:  ??? Is this still correct ?????
+    #     - ba0: Ellipsoid heights
+    #     - ba1: Geoid heights (AHD)
+    #     - ba3: New indexed LAS
+    return "ba1"
 
 
 def main(args=None):
