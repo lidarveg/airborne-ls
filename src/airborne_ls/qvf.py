@@ -6,9 +6,9 @@ file names.
 import os
 
 
-def _getfields(fullpath):
+def getfields(fullpath):
     """
-    Return the fields list of the given full path (reverse of _assemblefields)
+    Return the fields list of the given full path (reverse of assemblefields)
 
     Removes directory spec and parts after '.', splits on '_'
 
@@ -24,9 +24,9 @@ def _getfields(fullpath):
     return fields
 
 
-def _assemblefields(fields):
+def assemblefields(fields):
     """
-    Assemble the given fields to a base name (reverse of _getfields)
+    Assemble the given fields to a base name (reverse of getfields)
     """
     if len(fields) < 4:
         msg = f"Fields list {fields} has only {len(fields)} fields"
@@ -51,7 +51,7 @@ def getstagecode(filename):
     """
     Get the processing stage code from the given file name
     """
-    fields = _getfields(filename)
+    fields = getfields(filename)
     stagecode = fields[3][:3]
     return stagecode
 
@@ -67,12 +67,12 @@ def setstagecode(filename, stage):
     Returns:
       newfile (str): Filename with new stage code
     """
-    fields = _getfields(filename)
+    fields = getfields(filename)
     stageAndZone = fields[3]
     zone = stageAndZone[3:]
     newStageAndZone = stage + zone
     fields[3] = newStageAndZone
-    newbase = _assemblefields(fields)
+    newbase = assemblefields(fields)
     newFilename = _changebasefn(filename, newbase)
     return newFilename
 
@@ -81,7 +81,7 @@ def getoptionfield(fullpath, tagChar):
     """
     Return the value of the tagChar' option field (None if not present)
     """
-    fields = _getfields(fullpath)
+    fields = getfields(fullpath)
     optDict = {f[0]: f[1:] for f in fields[4:]}
     val = optDict.get(tagChar)
     return val
@@ -95,7 +95,7 @@ def setoptionfield(fullpath, tagChar, fieldVal):
 
     Return the new fullpath
     """
-    fields = _getfields(fullpath)
+    fields = getfields(fullpath)
     optDict = {f[0]: f[1:] for f in fields[4:]}
     if fieldVal is not None:
         optDict[tagChar] = fieldVal
@@ -103,7 +103,7 @@ def setoptionfield(fullpath, tagChar, fieldVal):
         optDict.pop(tagChar)
     tagList = sorted(optDict.keys())
     newFields = fields[:4] + [(t + optDict[t]) for t in tagList]
-    newbase = _assemblefields(newFields)
+    newbase = assemblefields(newFields)
     newFullpath = _changebasefn(fullpath, newbase)
     return newFullpath
 
@@ -112,7 +112,7 @@ def getwhere(fullpath):
     """
     Return the 'where' field of the given filename
     """
-    where = _getfields(fullpath)[1]
+    where = getfields(fullpath)[1]
     return where
 
 
@@ -121,9 +121,9 @@ def setwhere(fullpath, where):
     Change the 'where' field of the given fullpath to the given value. Return a
     new fullpath.
     """
-    fields = _getfields(fullpath)
+    fields = getfields(fullpath)
     fields[1] = where
-    newbase = _assemblefields(fields)
+    newbase = assemblefields(fields)
     newFullpath = _changebasefn(fullpath, newbase)
     return newFullpath
 
@@ -133,7 +133,7 @@ def getutmzone(filename):
     Return the UTM zone from the zoneCode field. Returns None
     if not UTM
     """
-    fields = _getfields(filename)
+    fields = getfields(filename)
     zoneField = fields[3][3:]
     if zoneField[0] == 'm':
         utmZone = int(zoneField[1:])

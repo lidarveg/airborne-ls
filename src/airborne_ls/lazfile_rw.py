@@ -121,7 +121,7 @@ def standardise_lasf(what, when, utmZone, stageCode, projectName, outdr,
 
     projectionCode = qvf.makeProjectionCode(utmZone)
     stageAndZone = f"{stageCode}{projectionCode}"
-    outfileTemplate = qvf._assemblefields([what, 'TILENAME', when, stageAndZone])
+    outfileTemplate = qvf.assemblefields([what, 'TILENAME', when, stageAndZone])
     outfileTemplate = qvf.setoptionfield(outfileTemplate, 'p', projectName)
     outfileTemplate = qvf.setsuffix(outfileTemplate, 'laz')
     outfileTemplate = os.path.join(outdr, outfileTemplate)
