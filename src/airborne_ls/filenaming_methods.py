@@ -93,13 +93,13 @@ def get_stageDict():
         "bb3": "grdR",
         "bb4": "NonGrdCodes",  # Non-ground codes
         "bb5": "fstDens",  # First return density
-        "bb8": "percentile1",  
-        "bb9": "percentile5",  
-        "bba": "percentile25",  
-        "bbb": "percentile50",  
-        "bbc": "percentile75",  
-        "bbd": "percentile95",  
-        "bbe": "percentile99",  
+        "bb8": "percentile1",
+        "bb9": "percentile5",
+        "bba": "percentile25",
+        "bbb": "percentile50",
+        "bbc": "percentile75",
+        "bbd": "percentile95",
+        "bbe": "percentile99",
         "bbh": "fpc",  # Foliage profile curve
         "bbi": "demHS",  # DEM hillshade
         "bbm": "csm",  # Canopy surface model
