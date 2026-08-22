@@ -4,10 +4,6 @@
 Script for processing LAS/LAZ files using laspy and converting them to a structured
 numpy record array.
 """
-
-import subprocess
-from pathlib import Path
-
 import numpy as np
 from osgeo import gdal, osr, gdal_array
 
