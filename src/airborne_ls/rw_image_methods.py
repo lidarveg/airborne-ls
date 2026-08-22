@@ -44,13 +44,6 @@ def writeImage(image, outfile, cmdargs, driver="GTiff", tlx=0.0, tly=0.0,
     file should have a .tif extension, not .img.
 
     """
-
-    if outfile.find("fpc") < 0:
-        outf_cog = outfile  # correct name will be used for COG
-        outfile = str(outfile).replace(
-            Path(outfile).suffix, "_temp.tif"
-        )  # temp file ??
-
     if len(image.shape) == 2:
         ny, nx = image.shape
         nz = 1
@@ -73,7 +66,7 @@ def writeImage(image, outfile, cmdargs, driver="GTiff", tlx=0.0, tly=0.0,
         ds.SetProjection(proj.ExportToWkt())
 
     # set colour table for bb4
-    if outfile.find("NonGrd_codes") > 0:
+    if outfile.find("NonGrdCodes") > 0:
         colors = gdal.ColorTable()
         # set color for each value
         colors.SetColorEntry(0, (254, 254, 254))  # never classified:
@@ -102,14 +95,14 @@ def writeImage(image, outfile, cmdargs, driver="GTiff", tlx=0.0, tly=0.0,
         for i in range(nz):
             band = ds.GetRasterBand(i + 1)
             # set color table and color interpretation
-            if outfile.find("NonGrd_codes") > 0:
+            if outfile.find("NonGrdCodes") > 0:
                 band.SetRasterColorTable(colors)
                 band.SetRasterColorInterpretation(gdal.GCI_PaletteIndex)
             band.WriteArray(image[i, :, :], 0, 0)
     else:
         band = ds.GetRasterBand(1)
         # set color table and color interpretation
-        if outfile.find("NonGrd_codes") > 0:
+        if outfile.find("NonGrdCodes") > 0:
             band.SetRasterColorTable(colors)
             band.SetRasterColorInterpretation(gdal.GCI_PaletteIndex)
         band.WriteArray(image, 0, 0)
@@ -123,32 +116,6 @@ def writeImage(image, outfile, cmdargs, driver="GTiff", tlx=0.0, tly=0.0,
     ds.FlushCache()
     band = None
     ds = None
-
-    # convert to COG ???
-    if outfile.find("fpc") < 0:
-        args = [
-            "gdal_translate",
-            outfile,
-            outf_cog,
-            "-of",
-            "COG",
-            "-co",
-            "BLOCKSIZE=256",
-            "-co",
-            "RESAMPLING=BILINEAR",
-            "-co",
-            "COMPRESS=DEFLATE",
-        ]
-        proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = proc.communicate()
-        if proc.returncode != 0:
-            # an error happened!
-            err_msg = f"{stderr.strip()}. Code: {proc.returncode}"
-            raise ValueError(err_msg)
-        else:
-            print(stdout)
-            print(stderr)
-        Path(outfile).unlink()
 
 
 #############################################################################################
