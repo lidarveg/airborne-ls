@@ -80,7 +80,6 @@ def run_dem_correction(cmdargs):
     cmdargs.stopfilenum = min(cmdargs.stopfilenum, len(infiles))
 
     infiles = infiles[cmdargs.startfilenum : cmdargs.stopfilenum]
-    print(infiles)
 
     # Set constants
     nullVal = -999.0
@@ -89,14 +88,13 @@ def run_dem_correction(cmdargs):
     realD_thres = -10.0  # Minimum valid DEM value
     resolution = f"r{int(cmdargs.psize * 100)}cm"
 
-    productName = "dem"
-    demfileList = getDemImageFiles(infilesFull, productName)
+    demProduct = "dem"
+    demfileList = getDemImageFiles(infilesFull, demProduct)
+    codesProduct = "NonGrdCodes"
+    codesStage = filenaming_methods.stageByProductName[codesProduct]
 
     # Process each file
     for demfile in demfileList:
-#        infileFull = Path(cmdargs.indir).joinpath(fn)
-#        base = fn.replace(".laz", "")
-#        demf = f"{cmdargs.indir}/{base}/{base}_bb0_dem_{resolution}.tif"
         img = rw_image_methods.imgRead(demfile)
 
         # Check if the DEM contains values below the threshold (excluding edges)
@@ -111,23 +109,19 @@ def run_dem_correction(cmdargs):
             temp_bd4 = np.zeros(
                 (img_size_pixels * multi, img_size_pixels * multi), dtype=np.uint8
             )
-            where = (fn.split("_"))[1]
             sImgCount = 0
 
             # Process neighbouring tiles
             for ct1, yoffset in enumerate(yidx):
                 for ct2, xoffset in enumerate(xidx):
-                    xloc = int(where[1:7]) + xoffset
-                    yloc = int(where[9:]) + yoffset
-                    whereOffset = f"x{xloc}ys{yloc}"
-                    baseOffset = base.replace(where, whereOffset)
-                    offsetF = f"{cmdargs.indir}/{baseOffset}/{baseOffset}_bb0_dem_{resolution}.tif"
+                    offsetDemFile = neighbourTileFilename(demfile, xoffset, yoffset)
+                    offsetCodesFile = qvf.setstagecode(offsetDemFile, codesStage)
+                    offsetCodesFile = qvf.setoptionfield(offsetCodesFile, 'l', codesProduct)
 
-                    if Path.is_file(Path(offsetF)):
-                        img_bb0 = rw_image_methods.imgRead(offsetF)
-                        img_bb4 = rw_image_methods.imgRead(
-                            offsetF.replace("dem", "NonGrd_codes").replace("bb0", "bb4")
-                        )
+                    if Path.is_file(Path(offsetDemFile)):
+                        img_bb0 = rw_image_methods.imgRead(offsetDemFile)
+                        img_bb4 = rw_image_methods.imgRead(offsetCodesFile)
+
                         ys = int(ct1 * img_size_pixels)
                         xs = int(ct2 * img_size_pixels)
                         temp_dem[
@@ -226,6 +220,47 @@ def getDemImageFiles(infilesFull, productName):
         demfile = candidateList[0]
         demfileList.append(demfile)
     return demfileList
+
+
+def neighbourTileFilename(tilefile, xOffset, yOffset):
+    """
+    Given the file name of a single tile of data, return the file name for
+    a neighbouring tile, based on the xOffset & yOffset parameters.
+
+    The X & Y offsets are taken to be in metres, and are exactly one tile in
+    some direction. So, for example, if the tile size is 1000m, then xOffset of -1000
+    would indicate the tile to the west, and a yOffset of +1000 would indicate the
+    tile to the north.
+
+    Parameters:
+      tilefile (str): File name of a single tile (as created by makeFilenameForTileProduct)
+      xOffset (int): Offset (metres) in X direction to top-left of neighbour tile
+      yOffset (int): Offset (metres) in Y direction to top-left of neighbour tile
+
+    Returns:
+      nbrfile (str): File name of requested neighbouring tile
+    """
+    where = qvf.getwhere(tilefile)
+    xNdx = where.find('x')
+    yNdx = where.find('y')
+    zNdx = where.find('z')
+    xCoord = int(where[xNdx + 1:yNdx])
+    yCoord = int(where[yNdx + 2:zNdx])
+    newX = xCoord + int(xOffset)
+    newY = yCoord + int(yOffset)
+    utmZone = int(where[zNdx + 1:])
+    if where[yNdx + 1] == 's':
+        utmZone = -utmZone
+    newWhere = qvf.makeTileWhere(newX, newY, utmZone)
+    nbrfileFull = qvf.setwhere(tilefile, newWhere)
+
+    # We probably also need to change the where field in the directory name
+    (nbrdir, nbrfile) = os.path.split(nbrfileFull)
+    if where == qvf.getwhere(nbrdir):
+        nbrdir = qvf.setwhere(nbrdir, newWhere)
+        nbrfileFull = os.path.join(nbrdir, nbrfile)
+
+    return nbrfileFull
 
 
 def tif2cog(infile, outfile):
