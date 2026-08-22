@@ -176,7 +176,7 @@ def run_las_standardisation(cmdargs):
         print(f"Processing LAS/LAZ file: {inLazfile}")
         data = laspy.read(inLazfile)
 
-        # Calculate northing and easting
+        # Calculate northing and easting of top-left corner of input tile
         northing = int(
             np.ceil(np.median(data.y[data.y > 0]) / input_tileS) * input_tileS)
         easting = int(
