@@ -17,7 +17,8 @@ gdal.UseExceptions()
 
 
 def writeImage(image, outfile, cmdargs, driver="GTiff", tlx=0.0, tly=0.0,
-               binsize=0.0, epsg=None, nullVal=None, parent_file=None):
+               binsize=0.0, epsg=None, nullVal=None, parent_file=None,
+               overviewResampling="BILINEAR", overviewLevels=[4, 8, 16, 32, 64, 128]):
     """
     Write data to a GDAL supported image file format
 
@@ -108,6 +109,10 @@ def writeImage(image, outfile, cmdargs, driver="GTiff", tlx=0.0, tly=0.0,
         for i in range(nz):
             band = ds.GetRasterBand(i + 1)
             band.SetNoDataValue(nullVal)
+
+    for i in range(nz):
+        band = ds.GetRasterBand(i + 1)
+        band.BuildOverviews(resampling=overviewResampling, overviewlist=overviewLevels)
 
     ds.FlushCache()
     band = None
