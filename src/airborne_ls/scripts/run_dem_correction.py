@@ -11,16 +11,18 @@ example:  uv run python scripts/run_dem_correction.py \
             --laz_flist  laz_flist2 --tile_s 1000. --psize 0.5 --epsg 28356
 
 """
-
+import os
 import argparse
 import logging
 import subprocess
 import sys
+import glob
 from pathlib import Path
 
 import numpy as np
+from osgeo import gdal
 
-from airborne_ls import gridding_methods, rw_image_methods
+from airborne_ls import gridding_methods, rw_image_methods, filenaming_methods, qvf
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -70,6 +72,7 @@ def run_dem_correction(cmdargs):
     fn = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
     with open(fn) as f:
         infiles = [line.strip() for line in f]
+    infilesFull = [os.path.join(cmdargs.indir, fn) for fn in infiles]
 
     # Determine the range of files to process
     if not cmdargs.stopfilenum:
@@ -77,6 +80,7 @@ def run_dem_correction(cmdargs):
     cmdargs.stopfilenum = min(cmdargs.stopfilenum, len(infiles))
 
     infiles = infiles[cmdargs.startfilenum : cmdargs.stopfilenum]
+    print(infiles)
 
     # Set constants
     nullVal = -999.0
@@ -85,12 +89,15 @@ def run_dem_correction(cmdargs):
     realD_thres = -10.0  # Minimum valid DEM value
     resolution = f"r{int(cmdargs.psize * 100)}cm"
 
+    productName = "dem"
+    demfileList = getDemImageFiles(infilesFull, productName)
+
     # Process each file
-    for fn in infiles:
-        infileFull = Path(cmdargs.indir).joinpath(fn)
-        base = fn.replace(".laz", "")
-        demf = f"{cmdargs.indir}/{base}/{base}_bb0_dem_{resolution}.tif"
-        img = rw_image_methods.imgRead(demf)
+    for demfile in demfileList:
+#        infileFull = Path(cmdargs.indir).joinpath(fn)
+#        base = fn.replace(".laz", "")
+#        demf = f"{cmdargs.indir}/{base}/{base}_bb0_dem_{resolution}.tif"
+        img = rw_image_methods.imgRead(demfile)
 
         # Check if the DEM contains values below the threshold (excluding edges)
         if np.min(img[2:-3, 2:-3]) < realD_thres:
@@ -181,6 +188,44 @@ def run_dem_correction(cmdargs):
                 # Clean up temporary files
                 Path(outfile).unlink()
                 Path(outfile_HS).unlink()
+
+
+def getDemImageFiles(infilesFull, productName):
+    """
+    Use the given list of laz files to deduce the list of corresponding DEM image
+    files.
+
+    Parameters:
+      infilesFull (list[str]): List of full paths for indexed laz files
+      demStage (str): QVF stage code for dem files
+
+    Returns:
+      demfileList (list[str]): List of DEM image files corresponding to the
+                               given list of laz files
+    """
+    demStage = filenaming_methods.stageByProductName[productName]
+    demfileList = []
+    for lazfile in infilesFull:
+        subdir = qvf.setsuffix(lazfile, '')
+        demfilePattern = qvf.setstagecode(os.path.basename(lazfile), demStage)
+        demfilePattern = qvf.setoptionfield(demfilePattern, 'l', productName)
+        demfilePattern = qvf.setoptionfield(demfilePattern, 'p', qvf.getoptionfield(lazfile, 'p'))
+        demfilePattern = qvf.setoptionfield(demfilePattern, 'r', '*')
+        demfilePattern = qvf.setsuffix(demfilePattern, '*')
+        demfilePattern = os.path.join(subdir, demfilePattern)
+        candidateList = glob.glob(demfilePattern)
+        candidateList = [fn for fn in candidateList if gdal.IdentifyDriver(fn) is not None]
+        if len(candidateList) == 0:
+            print(demfilePattern)
+            msg = f"No matching DEM image for laz file {lazfile}"
+            raise FileNotFoundError(msg)
+        elif len(candidateList) > 1:
+            msg = f"Unable to identify matching DEM, found {candidateList}"
+            raise ValueError(msg)
+
+        demfile = candidateList[0]
+        demfileList.append(demfile)
+    return demfileList
 
 
 def tif2cog(infile, outfile):
