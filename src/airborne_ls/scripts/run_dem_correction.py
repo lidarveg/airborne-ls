@@ -16,11 +16,9 @@ import argparse
 import logging
 import subprocess
 import sys
-import glob
 from pathlib import Path
 
 import numpy as np
-from osgeo import gdal
 
 from airborne_ls import gridding_methods, rw_image_methods, filenaming_methods, qvf
 
@@ -52,6 +50,8 @@ def getCmdargs(inputargs):
               "Default: %(default)s."))
     parser.add_argument("--tile_s", type=float, required=True,
         help="XY dimensions of LAS tile in metres.")
+    parser.add_argument("--driver", default='GTiff',
+        help="GDAL driver for image format (default=%(default)s)")
     parser.add_argument("--startfilenum", default=0, type=int,
         help="Position within laz_flist to start batch processing. Default: %(default)s.")
     parser.add_argument("--stopfilenum", type=int,
@@ -88,7 +88,7 @@ def run_dem_correction(cmdargs):
     realD_thres = -10.0  # Minimum valid DEM value
 
     demProduct = "dem"
-    demfileList = getDemImageFiles(infilesFull, demProduct)
+    demfileList = getDemImageFiles(infilesFull, demProduct, cmdargs.psize, cmdargs.driver)
     codesProduct = "NonGrdCodes"
     codesStage = filenaming_methods.stageByProductName[codesProduct]
 
@@ -174,7 +174,7 @@ def run_dem_correction(cmdargs):
                     print(stderr.decode("utf-8"))
 
 
-def getDemImageFiles(infilesFull, productName):
+def getDemImageFiles(infilesFull, productName, pixelSize, driver):
     """
     Use the given list of laz files to deduce the list of corresponding DEM image
     files.
@@ -187,27 +187,22 @@ def getDemImageFiles(infilesFull, productName):
       demfileList (list[str]): List of DEM image files corresponding to the
                                given list of laz files
     """
+    suffix = filenaming_methods.getSuffixFromDriverName(driver)
     demStage = filenaming_methods.stageByProductName[productName]
+    resStr = filenaming_methods.resolutionStrFromMetres(pixelSize)
     demfileList = []
     for lazfile in infilesFull:
         subdir = qvf.setsuffix(lazfile, '')
-        demfilePattern = qvf.setstagecode(os.path.basename(lazfile), demStage)
-        demfilePattern = qvf.setoptionfield(demfilePattern, 'l', productName)
-        demfilePattern = qvf.setoptionfield(demfilePattern, 'p', qvf.getoptionfield(lazfile, 'p'))
-        demfilePattern = qvf.setoptionfield(demfilePattern, 'r', '*')
-        demfilePattern = qvf.setsuffix(demfilePattern, '*')
-        demfilePattern = os.path.join(subdir, demfilePattern)
-        candidateList = glob.glob(demfilePattern)
-        candidateList = [fn for fn in candidateList if gdal.IdentifyDriver(fn) is not None]
-        if len(candidateList) == 0:
-            print(demfilePattern)
-            msg = f"No matching DEM image for laz file {lazfile}"
+        demfile = qvf.setstagecode(os.path.basename(lazfile), demStage)
+        demfile = qvf.setoptionfield(demfile, 'l', productName)
+        demfile = qvf.setoptionfield(demfile, 'p', qvf.getoptionfield(lazfile, 'p'))
+        demfile = qvf.setoptionfield(demfile, 'r', resStr)
+        demfile = qvf.setsuffix(demfile, suffix)
+        demfile = os.path.join(subdir, demfile)
+        if not os.path.exists(demfile):
+            msg = f"DEM file {demfile} not found"
             raise FileNotFoundError(msg)
-        elif len(candidateList) > 1:
-            msg = f"Unable to identify matching DEM, found {candidateList}"
-            raise ValueError(msg)
 
-        demfile = candidateList[0]
         demfileList.append(demfile)
     return demfileList
 
