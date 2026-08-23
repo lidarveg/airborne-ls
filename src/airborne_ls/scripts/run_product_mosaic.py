@@ -12,42 +12,23 @@ example: uv run python scripts/run_product_mosaic.py \
 import argparse
 import logging
 import os
-import subprocess
 import sys
 from pathlib import Path
 
 import numpy as np
+from osgeo import gdal
 from rios import rat
 
-from airborne_ls import filenaming_methods
+from airborne_ls import filenaming_methods, qvf
+
+
+gdal.UseExceptions()
 
 # Configure logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.ERROR, format="%(asctime)s: %(name)20s: %(levelname)10s: %(message)s"
 )
-
-# Constants
-PERCENTILES = [1, 5, 25, 50, 75, 95, 99]
-PRODUCT_DICT = {
-    "bb0": "dem",
-    "bb1": "maxH",
-    "bb2": "intens",
-    "bb3": "grdR",
-    "bb4": "NonGrd_returns",
-    "bb5": "fst_dens",
-    "bb8": "1_percentile",
-    "bb9": "5_percentile",
-    "bba": "25_percentile",
-    "bbb": "50_percentile",
-    "bbc": "75_percentile",
-    "bbd": "95_percentile",
-    "bbe": "99_percentile",
-    "bbh": "fpc",
-    "bbi": "demHS",
-    "bbm": "csm",
-    "bbn": "chm",
-}
 
 
 def getCmdargs(inputargs):
@@ -79,19 +60,16 @@ def getCmdargs(inputargs):
         help="Pixel size of the FPC layer (metres). Default: %(default)s.")
     parser.add_argument("--chm_psize", default=None, type=float,
         help="Optional: value estimated using pulse density (metres).")
-    parser.add_argument("--outStageList",
-        help="Three-letter stage code. If blank, run all stage codes.")
+    parser.add_argument("--stagecode",
+        help="Three-letter stage code to run. If blank, run all stage codes.")
+    parser.add_argument("--driver", default='GTiff',
+        help="GDAL driver for image format (default=%(default)s)")
 
     cmdargs = parser.parse_args(inputargs)
 
     # Input checks
     if not cmdargs.outdr:
         cmdargs.outdr = Path(cmdargs.indir)
-
-    if not cmdargs.outStageList:
-        cmdargs.outStageList = list(PRODUCT_DICT.keys())
-    else:
-        cmdargs.outStageList = [cmdargs.outStageList]
 
     if not Path(cmdargs.indir).exists():
         logger.error(f"Input directory {cmdargs.indir} not found.")
@@ -109,150 +87,78 @@ def runMerge(cmdargs):
     """
     Main routine
     """
+    if cmdargs.stagecode is not None:
+        outStageList = [cmdargs.stagecode]
+    else:
+        outStageList = list(filenaming_methods.stageByProductName.values())
+    productNameList = [filenaming_methods.productNameByStage[stage] for stage in outStageList]
 
     # read in list of las files and extract batch subset
-    with open(cmdargs.laz_flist) as f:
-        infiles = [line.strip() for line in f]
+    infiles = [line.strip() for line in open(cmdargs.laz_flist)]
 
-    fn_dict = filenaming_methods.createTileDict(infiles[0], cmdargs.tile_s)
-    project, year, zone, zone_prefix, sensor_code = (
-        fn_dict["project"],
-        fn_dict["date"],
-        fn_dict["zoneCode"],
-        fn_dict["zone_prefix"],
-        fn_dict["instrument"],
-    )
-    psizes = filenaming_methods.get_psizeDict(
-        psize=cmdargs.psize, ptile_s=cmdargs.ptile_s,
-        fpc_psize=cmdargs.fpc_psize, chm_psize=cmdargs.chm_psize)
-    missing_tiles = []
-    temp_output = Path(cmdargs.indir).joinpath("temp_output")
-    os.makedirs(temp_output, exist_ok=True)
-    for loc, outStage in enumerate(cmdargs.outStageList):
-        input_layers = []
-        stagec_def = filenaming_methods.get_stageDict()
-        tempList = Path(temp_output) / f"temp_list{outStage}"
+    for productName in productNameList:
+        missing_tiles = []
+        tileFileList = []
+        for lazfile in infiles:
+            subdir = os.path.join(cmdargs.indir, lazfile.replace('.laz', ''))
+            stage = filenaming_methods.stageByProductName[productName]
+            projectName = qvf.getoptionfield(lazfile, 'p')
+            productFile = qvf.setoptionfield(lazfile, 'l', productName)
+            productFile = qvf.setstagecode(productFile, stage)
+            suffix = filenaming_methods.getSuffixFromDriverName(cmdargs.driver)
+            productFile = qvf.setsuffix(productFile, suffix)
+            productFile = os.path.join(subdir, productFile)
 
-        with open(tempList, "w") as fout:
-            for fn in infiles:
-                infileFull = os.path.join(cmdargs.indir, fn)
-                outputDir = Path((infileFull).split(".")[0])
-                tileBasename = (fn).split(".")[0]
-                outputBasename = os.path.join(outputDir, tileBasename)
-                fnames = filenaming_methods.get_outfnames(
-                    outputBasename, psize=cmdargs.psize, ptile_s=cmdargs.ptile_s,
-                    fpc_psize=cmdargs.fpc_psize, chm_psize=cmdargs.chm_psize,
-                    pptiles=PERCENTILES)
+            # Choose resolution based on productName
+            res = cmdargs.psize
+            if productName == "fpc":
+                res = cmdargs.fpc_psize
+            elif productName == "chm":
+                res = cmdargs.chm_psize
+            elif productName.startswith('percentile'):
+                res = cmdargs.ptile_s
+            resStr = filenaming_methods.resolutionStrFromMetres(res)
+            productFile = qvf.setoptionfield(productFile, 'r', resStr)
 
-                if (stagec_def[outStage]).endswith("percentile"):
-                    num = int(((stagec_def[outStage]).split("_"))[0])
-                    layer = fnames["ptiles"][
-                        np.argwhere(np.array(PERCENTILES) == num)[0][0]
-                    ]
-                else:
-                    layer = fnames[stagec_def[outStage]]
+            # For the "dem" product, check for infilled version first
+            if productName == "dem":
+                productFile = qvf.setoptionfield(productFile, 'l', "demInfilled")
+                if not os.path.exists(productFile):
+                    productFile = qvf.setoptionfield(productFile, 'l', "dem")
 
-                if Path(layer).is_file():
-                    # #### testing
-                    if outStage == "bb0":
-                        infilled_demf = layer.replace("dem", "dem_infilled")
-                        if Path(infilled_demf).is_file():
-                            layer = infilled_demf
-                    #####
-                    input_layers.append(layer)
-                    fout.write(f"{layer}\n")
-                    logger.info(f"File added to mosaic: {layer}")
-                else:
-                    missing_tiles.append(layer)
-        fout.close()
+            if not os.path.exists(productFile):
+                missing_tiles.append(productFile)
+            else:
+                tileFileList.append(productFile)
+        if len(missing_tiles) > 0:
+            print("Missing", missing_tiles)
+        if len(tileFileList) == 0:
+            print("Missing everything")
 
-        what = f"ap{sensor_code}dr"
-        where = f"r{project}"
-        when = f"y{year}"
-        if len(str(year)) == 4:
-            when = f"{year}"
-        stageAndZone = f"{outStage}{zone_prefix}{zone}"
-        res = f"{psizes[outStage]}"
-        makeMosaicFilename = f"{what}_{where}_{when}_{stageAndZone}_{res}.tif"
+        # Create the mosaic output file, starting with the first input file name
+        outFile = os.path.basename(tileFileList[0])
+        outFile = qvf.setoptionfield(outFile, 'l', None)
+        outFile = qvf.setoptionfield(outFile, 'p', None)
+        outFile = qvf.setwhere(outFile, f"r{projectName}")
+        outFile = os.path.join(cmdargs.outdr, outFile)
 
-        logger.info(f"Output mosaic name: {makeMosaicFilename}")
-        logger.debug(f"Missing tiles in {makeMosaicFilename} include {missing_tiles}")
+        vrtFilename = qvf.setsuffix(outFile, 'vrt')
+        gdal.BuildVRT(vrtFilename, tileFileList)
 
-        makeMosaicPathname = Path(os.path.join(cmdargs.outdr, makeMosaicFilename))
-        vrt_filename = makeMosaicPathname.with_suffix(".vrt")
+        logger.info(f"Output mosaic name: {outFile}")
+        logger.debug(f"Missing tiles in {outFile} include {missing_tiles}")
 
-        args = ["gdalbuildvrt", "-input_file_list", tempList, vrt_filename]
-        proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = proc.communicate()
-        if proc.returncode != 0:
-            # an error happened!
-            err_msg = f"{stderr.strip()}. Code: {proc.returncode}"
-            raise ValueError(err_msg)
-        else:
-            print(stdout)
-            print(stderr)
+        driverName = cmdargs.driver
+        # If not GTiff, we need to do something about creation options
+        if driverName == "GTiff":
+            driverName = "COG"
+            creationOptions = ["COMPRESS=DEFLATE", "BLOCKSIZE=256",
+                               "RESAMPLING=BILINEAR", "BIGTIFF=IF_SAFER"]
+        translateOptions = gdal.TranslateOptions(format=driverName,
+            creationOptions=creationOptions)
+        gdal.Translate(outFile, vrtFilename, options=translateOptions)
 
-        # ######### note -- to create COG with history required two files
-        outf_cog = makeMosaicPathname  # correct name will be used for COG
-        outf_tif = str(makeMosaicPathname).replace(
-            Path(makeMosaicPathname).suffix, "_temp.tif")
-        # ########
-
-        command = [
-            "gdal_translate",
-            "-of",
-            "GTiff",
-            "-co",
-            "COMPRESS=LZW",
-            "-co",
-            "BIGTIFF=YES",
-            "-co",
-            "NUM_THREADS=4",
-            vrt_filename,
-            str(outf_tif),
-        ]
-
-        result = subprocess.run(command, capture_output=True, text=True, check=False)
-        if result.returncode != 0:
-            msg = "failed"
-            raise ValueError(msg)
-
-        if outStage == "bbh":
-            applyFPCcolor(str(outf_tif))
-
-        # Move vrt_filename (the VRT file) to temp folder
-        vrt_filename_basename = vrt_filename.name  # Get the filename
-        # Construct the destination path
-        vrt_temp_path = temp_output / vrt_filename_basename
-        vrt_filename.rename(vrt_temp_path)  # Move the file
-        vrt_filename = vrt_temp_path
-
-        # convert to COG
-        args = [
-            "gdal_translate",
-            outf_tif,
-            outf_cog,
-            "-of",
-            "COG",
-            "-co",
-            "BLOCKSIZE=256",
-            "-co",
-            "RESAMPLING=BILINEAR",
-            "-co",
-            "COMPRESS=DEFLATE",
-            "-co",
-            "BIGTIFF=YES",
-        ]
-        proc = subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        stdout, stderr = proc.communicate()
-        if proc.returncode != 0:
-            # an error happened!
-            err_msg = f"{stderr.strip()}. Code: {proc.returncode}"
-            raise ValueError(err_msg)
-        else:
-            print(stdout)
-            print(stderr)
-        Path(outf_tif).unlink()
+        os.remove(vrtFilename)
 
 
 def applyFPCcolor(fout):
