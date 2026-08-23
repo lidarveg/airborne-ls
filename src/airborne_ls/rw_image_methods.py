@@ -18,7 +18,7 @@ gdal.UseExceptions()
 
 def writeImage(image, outfile, cmdargs, driver="GTiff", tlx=0.0, tly=0.0,
                binsize=0.0, epsg=None, nullVal=None, parent_file=None,
-               overviewResampling="BILINEAR", overviewLevels=[4, 8, 16, 32, 64, 128]):
+               overviewResampling="BILINEAR", overviewLevels=[4, 8, 16, 32, 64]):
     """
     Write data to a GDAL supported image file format
 
