@@ -203,6 +203,7 @@ def run_tile_products(cmdargs):
         logger.info(f"LAZ file and header read in for {infileFull}")
 
         # Skip processing if overwrite is not allowed and files already exist
+        # Note from NF. This overwrite logic does not seem correct. Look into this.
         if not cmdargs.overwrite:
             # arrays to store processing segments of tiles
             tileSizePix = int(cmdargs.tile_s / cmdargs.psize)
