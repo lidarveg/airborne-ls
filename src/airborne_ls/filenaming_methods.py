@@ -77,6 +77,9 @@ stageByProductName = {
 #    "slopedh5x5": "bbu"        # Slope derived from 5x5 window
 #    "streamClassi": "bbv"      # Stream classification
 
+# And a reverse lookup of the same information
+productNameByStage = {stageByProductName[k]: k for k in stageByProductName}
+
 
 def get_stageDict():
     """
