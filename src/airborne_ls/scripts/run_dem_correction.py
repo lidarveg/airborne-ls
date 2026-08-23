@@ -19,6 +19,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+from osgeo import gdal
 
 from airborne_ls import gridding_methods, rw_image_methods, filenaming_methods, qvf
 
@@ -161,17 +162,8 @@ def run_dem_correction(cmdargs):
                     outDemfile, cmdargs, tlx=h["tlx"], tly=h["tly"], binsize=h["pixel_s"],
                     epsg=cmdargs.epsg, nullVal=nullVal)
 
-                args = ["gdaldem", "hillshade", outDemfile, outDemHSfile, "-compute_edges"]
-                proc = subprocess.Popen(
-                    args, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-                )
-                stdout, stderr = proc.communicate()
-                if proc.returncode != 0:
-                    msg = f"{stderr.strip().decode('utf-8')}. Code: {proc.returncode}"
-                    raise ValueError(msg)
-                else:
-                    print(stdout.decode("utf-8"))
-                    print(stderr.decode("utf-8"))
+                demOptions = gdal.DEMProcessingOptions(computeEdges=True)
+                gdal.DEMProcessing(outDemHSfile, outDemfile, "hillshade", options=demOptions)
 
 
 def getDemImageFiles(infilesFull, productName, pixelSize, driver):

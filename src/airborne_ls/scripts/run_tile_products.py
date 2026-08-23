@@ -28,7 +28,6 @@ uv run python scripts/run_tile_products.py \
 
 import argparse
 import logging
-import subprocess
 import sys
 from pathlib import Path
 
@@ -36,6 +35,7 @@ import laspy
 import numpy as np
 from rios import rat
 from scipy import ndimage
+from osgeo import gdal
 
 from airborne_ls import (
     filenaming_methods,
@@ -487,24 +487,9 @@ def run_tile_products(cmdargs):
             applyFPCcolor(outfnames["fpc"])
             logger.info(f"Tiles written to file {infileFull}")
 
-            args = [
-                "gdaldem",
-                "hillshade",
-                outfnames["dem"],
-                outfnames["demHS"],
-                "-compute_edges",
-            ]
-            proc = subprocess.Popen(
-                args, stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            )
-            stdout, stderr = proc.communicate()
-            if proc.returncode != 0:
-                # an error happened!
-                err_msg = f"{stderr.strip()}. Code: {proc.returncode}"
-                raise ValueError(err_msg)
-            else:
-                print(stdout)
-                print(stderr)
+            demOptions = gdal.DEMProcessingOptions(computeEdges=True)
+            gdal.DEMProcessing(outfnames["demHS"], outfnames["dem"], "hillshade",
+                options=demOptions)
 
             # calculate and write out to a temporary file return,pulse,area stats while
             # data held in memory
