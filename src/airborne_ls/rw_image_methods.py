@@ -110,9 +110,7 @@ def writeImage(image, outfile, cmdargs, driver="GTiff", tlx=0.0, tly=0.0,
             band = ds.GetRasterBand(i + 1)
             band.SetNoDataValue(nullVal)
 
-    for i in range(nz):
-        band = ds.GetRasterBand(i + 1)
-        band.BuildOverviews(resampling=overviewResampling, overviewlist=overviewLevels)
+    ds.BuildOverviews(resampling=overviewResampling, overviewlist=overviewLevels)
 
     ds.FlushCache()
     band = None
