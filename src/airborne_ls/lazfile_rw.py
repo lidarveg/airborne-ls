@@ -23,7 +23,7 @@ from pathlib import Path
 import laspy
 import numpy as np
 
-from airborne_ls import filenaming_methods
+from airborne_ls import filenaming_methods, qvf
 
 logger = logging.getLogger(__name__)
 
@@ -97,8 +97,8 @@ def laspy2rec(infile):
 
 
 ###################################################################################################
-def standardise_lasf(fn_base, outdr, data, easting, northing, tile_s, out_tile_s,
-        binSize, filename_Parent):
+def standardise_lasf(what, when, utmZone, stageCode, projectName, outdr,
+        data, easting, northing, tile_s, out_tile_s, binSize, filename_Parent):
     """
     Using laspy, rename file using naming convention, add index, remove noise and write out
     supplied files to .laz
@@ -117,135 +117,134 @@ def standardise_lasf(fn_base, outdr, data, easting, northing, tile_s, out_tile_s
     Returns:
         str: Status message indicating the result of the processing.
     """
-    test_divisible = tile_s % out_tile_s == 0
+    segments = np.arange(0, int(tile_s), int(out_tile_s))
 
-    if test_divisible:
-        segments = np.arange(0, int(tile_s), int(out_tile_s))
+    projectionCode = qvf.makeProjectionCode(utmZone)
+    stageAndZone = f"{stageCode}{projectionCode}"
+    outfileTemplate = qvf.assemblefields([what, 'TILENAME', when, stageAndZone])
+    outfileTemplate = qvf.setoptionfield(outfileTemplate, 'p', projectName)
+    outfileTemplate = qvf.setsuffix(outfileTemplate, 'laz')
+    outfileTemplate = os.path.join(outdr, outfileTemplate)
 
-        for tile_x in segments:
-            for tile_y in segments:
-                northing_new = int(northing - tile_y)
-                easting_new = int(easting + tile_x)
+    for tile_x in segments:
+        for tile_y in segments:
+            northing_new = int(northing - tile_y)
+            easting_new = int(easting + tile_x)
+            tileWhere = qvf.makeTileWhere(easting, northing, utmZone)
+            outFile = qvf.setwhere(outfileTemplate, tileWhere)
 
-                pts = fn_base.split("_")
-                fn_where = f"x{easting_new}ys{northing_new}"
-                fn_base2 = ("_").join([pts[0], fn_where, pts[2], pts[3], pts[4]])
-                outfn = str(Path(outdr).joinpath(fn_base2))
+            # simply exclude points outside the tile extents + irrelevant codes/data
+            # 7 = low point noise, 18 = high point noise.. note some providers can use
+            # different / new code
+            # z-thresholds are problematic.. as you can have negative elevation and what
+            # upper limit? for aus 3000m works
 
-                # simply exclude points outside the tile extents + irrelevant codes/data
-                # 7 = low point noise, 18 = high point noise.. note some providers can use
-                # different / new code
-                # z-thresholds are problematic.. as you can have negative elevation and what
-                # upper limit? for aus 3000m works
-
-                good_indices = (
-                    (
-                        (float(easting_new + out_tile_s - 0.001) > data.x)
-                        & (float(easting_new + 0.001) <= data.x)
-                    )
-                    & (
-                        ((northing_new - 0.001) >= data.y)
-                        & ((northing_new - out_tile_s + 0.001) < data.y)
-                    )
-                    & ((-10.0 < data.z) & (3000.0 > data.z))
-                    & (data.classification != 7)
-                    & (data.classification != 18)
-                    & (data.classification != 64)
+            good_indices = (
+                (
+                    (float(easting_new + out_tile_s - 0.001) > data.x)
+                    & (float(easting_new + 0.001) <= data.x)
                 )
+                & (
+                    ((northing_new - 0.001) >= data.y)
+                    & ((northing_new - out_tile_s + 0.001) < data.y)
+                )
+                & ((-10.0 < data.z) & (3000.0 > data.z))
+                & (data.classification != 7)
+                & (data.classification != 18)
+                & (data.classification != 64)
+            )
 
-                if np.sum(good_indices) > 0:
-                    data2 = data[good_indices]
-                    new_hdr = copy(data.header)
-                    new_hdr.point_count = 0
-                    new_las = laspy.LasData(new_hdr)
+            if np.sum(good_indices) > 0:
+                data2 = data[good_indices]
+                new_hdr = copy(data.header)
+                new_hdr.point_count = 0
+                new_las = laspy.LasData(new_hdr)
 
-                    ##########################################################################
-                    # GENERATE INDEX
-                    nbinsRow = np.round(out_tile_s / binSize)  # ****
-                    xIdx = ((data2.x - easting_new) // binSize).astype(np.int32)
-                    yIdx = ((northing_new - np.array(data2.y)) // binSize).astype(
-                        np.int32
-                    )
-                    index = ((yIdx * nbinsRow) + xIdx).astype(int)
-                    nbins = int(nbinsRow * nbinsRow)
+                ##########################################################################
+                # GENERATE INDEX
+                nbinsRow = np.round(out_tile_s / binSize)  # ****
+                xIdx = ((data2.x - easting_new) // binSize).astype(np.int32)
+                yIdx = ((northing_new - np.array(data2.y)) // binSize).astype(
+                    np.int32
+                )
+                index = ((yIdx * nbinsRow) + xIdx).astype(int)
+                nbins = int(nbinsRow * nbinsRow)
 
-                    start = 0
-                    newIdx = [0]
-                    sortingIdx = []
-                    # needs speeding up..
-                    for ct, binIdx in enumerate(range(nbins + 1)):
-                        vals2 = np.argwhere(index == binIdx)
-                        if sum(vals2) >= 0:
-                            start += len(vals2)
-                            if len(sortingIdx) < 1:
-                                sortingIdx = vals2
-                            else:
-                                sortingIdx = np.append(sortingIdx, vals2)
-                            newIdx.append(np.copy(start))
-                    newIdx.append(len(data2.x))
-                    data2 = data2[sortingIdx]
-                    del sortingIdx
+                start = 0
+                newIdx = [0]
+                sortingIdx = []
+                # needs speeding up..
+                for ct, binIdx in enumerate(range(nbins + 1)):
+                    vals2 = np.argwhere(index == binIdx)
+                    if sum(vals2) >= 0:
+                        start += len(vals2)
+                        if len(sortingIdx) < 1:
+                            sortingIdx = vals2
+                        else:
+                            sortingIdx = np.append(sortingIdx, vals2)
+                        newIdx.append(np.copy(start))
+                newIdx.append(len(data2.x))
+                data2 = data2[sortingIdx]
+                del sortingIdx
 
-                    ##########################################################################
-                    newIdx = np.array(newIdx, dtype=np.float64)
-                    nElems = int(nbins + 1)
-                    #############################
-                    binS = struct.pack("2d", np.float64(binSize), np.float64(nbins))
-                    # Instantiate and store new VLR.
-                    new_vlr = laspy.VLR(
-                        user_id="BINSIZE",
-                        record_id=1,
-                        description="defines binSize chunk",
-                        record_data=binS,
-                    )
-                    new_las.vlrs.append(new_vlr)
-                    #############################
-                    bin_pos = struct.pack(f"{nElems}d", *newIdx[0:nElems])
-                    # Instantiate and store new VLR.
-                    new_vlr = laspy.VLR(
-                        user_id="BIN_POS",
-                        record_id=2,
-                        description="defines BIN_POS",
-                        record_data=bin_pos,
-                    )
-                    new_las.vlrs.append(new_vlr)
-                    #####################################
-                    # check nbins match tile_s
-                    test_bins = int((out_tile_s / binSize) ** 2)
+                ##########################################################################
+                newIdx = np.array(newIdx, dtype=np.float64)
+                nElems = int(nbins + 1)
+                #############################
+                binS = struct.pack("2d", np.float64(binSize), np.float64(nbins))
+                # Instantiate and store new VLR.
+                new_vlr = laspy.VLR(
+                    user_id="BINSIZE",
+                    record_id=1,
+                    description="defines binSize chunk",
+                    record_data=binS,
+                )
+                new_las.vlrs.append(new_vlr)
+                #############################
+                bin_pos = struct.pack(f"{nElems}d", *newIdx[0:nElems])
+                # Instantiate and store new VLR.
+                new_vlr = laspy.VLR(
+                    user_id="BIN_POS",
+                    record_id=2,
+                    description="defines BIN_POS",
+                    record_data=bin_pos,
+                )
+                new_las.vlrs.append(new_vlr)
+                #####################################
+                # check nbins match tile_s
+                test_bins = int((out_tile_s / binSize) ** 2)
 
-                    if test_bins != nbins:
-                        msg = "mis-match in bin indexing"
-                        logger.error(msg)
-                        raise ValueError(msg)
-                    ###################################
-                    new_las.points = data2.points.copy()
-                    new_las.write(outfn)
+                if test_bins != nbins:
+                    msg = "mis-match in bin indexing"
+                    logger.error(msg)
+                    raise ValueError(msg)
+                ###################################
+                new_las.points = data2.points.copy()
+                new_las.write(outFile)
 
-                    # check file is not corrupted.
-                    with laspy.open(outfn) as las:
-                        point_count = las.header.point_count
-                        xmin, ymin, zmin = las.header.min  # noqa
-                        xmax, ymax, zmax = las.header.max  # noqa
+                # check file is not corrupted.
+                with laspy.open(outFile) as las:
+                    point_count = las.header.point_count
+                    xmin, ymin, zmin = las.header.min  # noqa
+                    xmax, ymax, zmax = las.header.max  # noqa
 
-                    if point_count < 1:
-                        msg = f"File likely experienced wrapping: {outfn}"
-                        logger.error(msg)
-                        raise ValueError(msg)
-                    if xmin < 1:
-                        msg = f"File likely experienced wrapping: {outfn}"
-                        logger.error(msg)
-                        raise ValueError(msg)
-                    if ymax < 1:
-                        msg = f"File likely experienced wrapping: {outfn}"
-                        logger.error(msg)
-                        raise ValueError(msg)
+                if point_count < 1:
+                    msg = f"File likely experienced wrapping: {outFile}"
+                    logger.error(msg)
+                    raise ValueError(msg)
+                if xmin < 1:
+                    msg = f"File likely experienced wrapping: {outFile}"
+                    logger.error(msg)
+                    raise ValueError(msg)
+                if ymax < 1:
+                    msg = f"File likely experienced wrapping: {outFile}"
+                    logger.error(msg)
+                    raise ValueError(msg)
 
-                    status = "file indexed"
-                else:
-                    data2 = None
-                    status = "Status: No Good Indices"
-    else:
-        print("tile dimensions are not divisible %s and %s") % (tile_s, out_tile_s)
+                status = "file indexed"
+            else:
+                data2 = None
+                status = "Status: No Good Indices"
 
     del data
 

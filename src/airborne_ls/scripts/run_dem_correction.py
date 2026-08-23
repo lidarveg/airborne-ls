@@ -11,7 +11,7 @@ example:  uv run python scripts/run_dem_correction.py \
             --laz_flist  laz_flist2 --tile_s 1000. --psize 0.5 --epsg 28356
 
 """
-
+import os
 import argparse
 import logging
 import subprocess
@@ -20,7 +20,7 @@ from pathlib import Path
 
 import numpy as np
 
-from airborne_ls import gridding_methods, rw_image_methods
+from airborne_ls import gridding_methods, rw_image_methods, filenaming_methods, qvf
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -50,6 +50,8 @@ def getCmdargs(inputargs):
               "Default: %(default)s."))
     parser.add_argument("--tile_s", type=float, required=True,
         help="XY dimensions of LAS tile in metres.")
+    parser.add_argument("--driver", default='GTiff',
+        help="GDAL driver for image format (default=%(default)s)")
     parser.add_argument("--startfilenum", default=0, type=int,
         help="Position within laz_flist to start batch processing. Default: %(default)s.")
     parser.add_argument("--stopfilenum", type=int,
@@ -70,6 +72,7 @@ def run_dem_correction(cmdargs):
     fn = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
     with open(fn) as f:
         infiles = [line.strip() for line in f]
+    infilesFull = [os.path.join(cmdargs.indir, fn) for fn in infiles]
 
     # Determine the range of files to process
     if not cmdargs.stopfilenum:
@@ -83,14 +86,15 @@ def run_dem_correction(cmdargs):
     img_size_metres = int(cmdargs.tile_s)
     img_size_pixels = int(img_size_metres / cmdargs.psize)
     realD_thres = -10.0  # Minimum valid DEM value
-    resolution = f"r{int(cmdargs.psize * 100)}cm"
+
+    demProduct = "dem"
+    demfileList = getDemImageFiles(infilesFull, demProduct, cmdargs.psize, cmdargs.driver)
+    codesProduct = "NonGrdCodes"
+    codesStage = filenaming_methods.stageByProductName[codesProduct]
 
     # Process each file
-    for fn in infiles:
-        infileFull = Path(cmdargs.indir).joinpath(fn)
-        base = fn.replace(".laz", "")
-        demf = f"{cmdargs.indir}/{base}/{base}_bb0_dem_{resolution}.tif"
-        img = rw_image_methods.imgRead(demf)
+    for demfile in demfileList:
+        img = rw_image_methods.imgRead(demfile)
 
         # Check if the DEM contains values below the threshold (excluding edges)
         if np.min(img[2:-3, 2:-3]) < realD_thres:
@@ -104,23 +108,19 @@ def run_dem_correction(cmdargs):
             temp_bd4 = np.zeros(
                 (img_size_pixels * multi, img_size_pixels * multi), dtype=np.uint8
             )
-            where = (fn.split("_"))[1]
             sImgCount = 0
 
             # Process neighbouring tiles
             for ct1, yoffset in enumerate(yidx):
                 for ct2, xoffset in enumerate(xidx):
-                    xloc = int(where[1:7]) + xoffset
-                    yloc = int(where[9:]) + yoffset
-                    whereOffset = f"x{xloc}ys{yloc}"
-                    baseOffset = base.replace(where, whereOffset)
-                    offsetF = f"{cmdargs.indir}/{baseOffset}/{baseOffset}_bb0_dem_{resolution}.tif"
+                    offsetDemFile = neighbourTileFilename(demfile, xoffset, yoffset)
+                    offsetCodesFile = qvf.setstagecode(offsetDemFile, codesStage)
+                    offsetCodesFile = qvf.setoptionfield(offsetCodesFile, 'l', codesProduct)
 
-                    if Path.is_file(Path(offsetF)):
-                        img_bb0 = rw_image_methods.imgRead(offsetF)
-                        img_bb4 = rw_image_methods.imgRead(
-                            offsetF.replace("dem", "NonGrd_codes").replace("bb0", "bb4")
-                        )
+                    if Path.is_file(Path(offsetDemFile)):
+                        img_bb0 = rw_image_methods.imgRead(offsetDemFile)
+                        img_bb4 = rw_image_methods.imgRead(offsetCodesFile)
+
                         ys = int(ct1 * img_size_pixels)
                         xs = int(ct2 * img_size_pixels)
                         temp_dem[
@@ -148,23 +148,20 @@ def run_dem_correction(cmdargs):
 
             # Save the infilled DEM if it contains valid data
             if np.max(res) > realD_thres:
-                outf_fn = demf.replace("dem", "dem_infilled")
-                outf_cog = outf_fn
-                outfile = str(outf_fn).replace(Path(outf_fn).suffix, "_temp.tif")
-                h = rw_image_methods.imgH(demf)
+                outDemfile = qvf.setoptionfield(demfile, 'l', "demInfilled")
+                hillshadeProduct = "demHS"
+                hillshadeStage = filenaming_methods.stageByProductName[hillshadeProduct]
+                outDemHSfile = qvf.setstagecode(demfile, hillshadeStage)
+                outDemHSfile = qvf.setoptionfield(outDemHSfile, 'l', hillshadeProduct)
+                h = rw_image_methods.imgH(demfile)
                 res[res < realD_thres] = nullVal
 
                 rw_image_methods.writeImage(
                     np.round(res.astype(np.float32), 3),
-                    outfile, cmdargs, tlx=h["tlx"], tly=h["tly"], binsize=h["pixel_s"],
-                    epsg=cmdargs.epsg, nullVal=nullVal, parent_file=infileFull)
-                tif2cog(outfile, outf_cog)
+                    outDemfile, cmdargs, tlx=h["tlx"], tly=h["tly"], binsize=h["pixel_s"],
+                    epsg=cmdargs.epsg, nullVal=nullVal)
 
-                # Recreate hillshade
-                demHS_cog = f"{cmdargs.indir}/{base}/{base}_bbi_demHS_{resolution}.tif"
-                outfile_HS = str(demHS_cog).replace(Path(demHS_cog).suffix, "_temp.tif")
-
-                args = ["gdaldem", "hillshade", outfile, outfile_HS, "-compute_edges"]
+                args = ["gdaldem", "hillshade", outDemfile, outDemHSfile, "-compute_edges"]
                 proc = subprocess.Popen(
                     args, stdout=subprocess.PIPE, stderr=subprocess.PIPE
                 )
@@ -176,11 +173,79 @@ def run_dem_correction(cmdargs):
                     print(stdout.decode("utf-8"))
                     print(stderr.decode("utf-8"))
 
-                tif2cog(outfile_HS, demHS_cog)
 
-                # Clean up temporary files
-                Path(outfile).unlink()
-                Path(outfile_HS).unlink()
+def getDemImageFiles(infilesFull, productName, pixelSize, driver):
+    """
+    Use the given list of laz files to deduce the list of corresponding DEM image
+    files.
+
+    Parameters:
+      infilesFull (list[str]): List of full paths for indexed laz files
+      demStage (str): QVF stage code for dem files
+
+    Returns:
+      demfileList (list[str]): List of DEM image files corresponding to the
+                               given list of laz files
+    """
+    suffix = filenaming_methods.getSuffixFromDriverName(driver)
+    demStage = filenaming_methods.stageByProductName[productName]
+    resStr = filenaming_methods.resolutionStrFromMetres(pixelSize)
+    demfileList = []
+    for lazfile in infilesFull:
+        subdir = qvf.setsuffix(lazfile, '')
+        demfile = qvf.setstagecode(os.path.basename(lazfile), demStage)
+        demfile = qvf.setoptionfield(demfile, 'l', productName)
+        demfile = qvf.setoptionfield(demfile, 'p', qvf.getoptionfield(lazfile, 'p'))
+        demfile = qvf.setoptionfield(demfile, 'r', resStr)
+        demfile = qvf.setsuffix(demfile, suffix)
+        demfile = os.path.join(subdir, demfile)
+        if not os.path.exists(demfile):
+            msg = f"DEM file {demfile} not found"
+            raise FileNotFoundError(msg)
+
+        demfileList.append(demfile)
+    return demfileList
+
+
+def neighbourTileFilename(tilefile, xOffset, yOffset):
+    """
+    Given the file name of a single tile of data, return the file name for
+    a neighbouring tile, based on the xOffset & yOffset parameters.
+
+    The X & Y offsets are taken to be in metres, and are exactly one tile in
+    some direction. So, for example, if the tile size is 1000m, then xOffset of -1000
+    would indicate the tile to the west, and a yOffset of +1000 would indicate the
+    tile to the north.
+
+    Parameters:
+      tilefile (str): File name of a single tile (as created by makeFilenameForTileProduct)
+      xOffset (int): Offset (metres) in X direction to top-left of neighbour tile
+      yOffset (int): Offset (metres) in Y direction to top-left of neighbour tile
+
+    Returns:
+      nbrfile (str): File name of requested neighbouring tile
+    """
+    where = qvf.getwhere(tilefile)
+    xNdx = where.find('x')
+    yNdx = where.find('y')
+    zNdx = where.find('z')
+    xCoord = int(where[xNdx + 1:yNdx])
+    yCoord = int(where[yNdx + 2:zNdx])
+    newX = xCoord + int(xOffset)
+    newY = yCoord + int(yOffset)
+    utmZone = int(where[zNdx + 1:])
+    if where[yNdx + 1] == 's':
+        utmZone = -utmZone
+    newWhere = qvf.makeTileWhere(newX, newY, utmZone)
+    nbrfileFull = qvf.setwhere(tilefile, newWhere)
+
+    # We probably also need to change the where field in the directory name
+    (nbrdir, nbrfile) = os.path.split(nbrfileFull)
+    if where == qvf.getwhere(nbrdir):
+        nbrdir = qvf.setwhere(nbrdir, newWhere)
+        nbrfileFull = os.path.join(nbrdir, nbrfile)
+
+    return nbrfileFull
 
 
 def tif2cog(infile, outfile):

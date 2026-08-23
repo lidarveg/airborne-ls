@@ -203,6 +203,7 @@ def run_tile_products(cmdargs):
         logger.info(f"LAZ file and header read in for {infileFull}")
 
         # Skip processing if overwrite is not allowed and files already exist
+        # Note from NF. This overwrite logic does not seem correct. Look into this.
         if not cmdargs.overwrite:
             # arrays to store processing segments of tiles
             tileSizePix = int(cmdargs.tile_s / cmdargs.psize)
@@ -463,19 +464,20 @@ def run_tile_products(cmdargs):
             rw_image_methods.writeImage(
                 grTile, outfnames["grdR"], cmdargs, tlx=easting, tly=northing,
                 binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=rtnClassNull,
-                parent_file=infileFull)
+                parent_file=infileFull, overviewResampling="NEAREST")
             rw_image_methods.writeImage(
-                non_grTile, outfnames["NonGrd_codes"], cmdargs,
+                non_grTile, outfnames["NonGrdCodes"], cmdargs,
                 tlx=easting, tly=northing, binsize=cmdargs.psize, epsg=cmdargs.epsg,
-                nullVal=rtnClassNull, parent_file=infileFull)
+                nullVal=rtnClassNull, parent_file=infileFull, overviewResampling="NEAREST")
             rw_image_methods.writeImage(
-                ptDenTile, outfnames["fst_dens"], cmdargs,
+                ptDenTile, outfnames["fstDens"], cmdargs,
                 tlx=easting, tly=northing, binsize=cmdargs.psize,
                 epsg=cmdargs.epsg, nullVal=0, parent_file=infileFull)
             for idx, pp in enumerate(percentiles):
                 layer = pctTile[idx, :, :]
+                productName = f"percentile{pp}"
                 rw_image_methods.writeImage(
-                    layer, outfnames["ptiles"][idx], cmdargs, tlx=easting, tly=northing,
+                    layer, outfnames[productName], cmdargs, tlx=easting, tly=northing,
                     binsize=cmdargs.ptile_s, epsg=cmdargs.epsg, nullVal=nullVal,
                     parent_file=infileFull)
             rw_image_methods.writeImage(

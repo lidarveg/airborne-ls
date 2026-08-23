@@ -42,8 +42,43 @@ import logging
 import os
 
 import numpy as np
+from osgeo import gdal
+
+from airborne_ls import qvf
 
 logger = logging.getLogger(__name__)
+
+
+stageByProductName = {
+    "dem" : "bb0",
+    "maxH" : "bb1",
+    "intens" : "bb2",
+    "grdR" : "bb3",
+    "NonGrdCodes" : "bb4",     # Non-ground codes
+    "fstDens" : "bb5",         # First return density
+    "percentile1" : "bb8",
+    "percentile5" : "bb9",
+    "percentile25" : "bba",
+    "percentile50" : "bbb",
+    "percentile75" : "bbc",
+    "percentile95" : "bbd",
+    "percentile99" : "bbe",
+    "fpc" : "bbh",             # Foliage profile curve
+    "demHS" : "bbi",           # DEM hillshade
+    "csm" : "bbm",             # Canopy surface model
+    "chm" : "bbn",             # Canopy height model
+}
+# Reserved for possible future inclusion
+#    "demFilled4hydro": "bbp"   # DEM filled for hydrological analysis
+#    "flowAccumulation": "bbq"
+#    "DFMEraw": "bbr"           # Digital Flow Model Elevation (raw)
+#    "rgDFME": "bbs"            # Region-growing DFME
+#    "depressionDepth": "bbt"
+#    "slopedh5x5": "bbu"        # Slope derived from 5x5 window
+#    "streamClassi": "bbv"      # Stream classification
+
+# And a reverse lookup of the same information
+productNameByStage = {stageByProductName[k]: k for k in stageByProductName}
 
 
 def get_stageDict():
@@ -59,15 +94,15 @@ def get_stageDict():
         "bb1": "maxH",
         "bb2": "intens",
         "bb3": "grdR",
-        "bb4": "NonGrd_codes",  # Non-ground codes
-        "bb5": "fst_dens",  # First return density
-        "bb8": "1_percentile",
-        "bb9": "5_percentile",
-        "bba": "25_percentile",
-        "bbb": "50_percentile",
-        "bbc": "75_percentile",
-        "bbd": "95_percentile",
-        "bbe": "99_percentile",
+        "bb4": "NonGrdCodes",  # Non-ground codes
+        "bb5": "fstDens",  # First return density
+        "bb8": "percentile1",
+        "bb9": "percentile5",
+        "bba": "percentile25",
+        "bbb": "percentile50",
+        "bbc": "percentile75",
+        "bbd": "percentile95",
+        "bbe": "percentile99",
         "bbh": "fpc",  # Foliage profile curve
         "bbi": "demHS",  # DEM hillshade
         "bbm": "csm",  # Canopy surface model
@@ -180,14 +215,21 @@ def get_psizeDict(psize=0.5, ptile_s=5, fpc_psize=10, chm_psize=0.2):
     return psizeDict
 
 
-def get_outfnames(
-    outputBasename,
-    psize=0.5,
-    ptile_s=5,
-    fpc_psize=10,
-    chm_psize=0.2,
-    pptiles=(1, 5, 25, 50, 75, 95, 99),
-):
+def resolutionStrFromMetres(metres):
+    """
+    Create a resolution string from the given number of metres
+    """
+    if metres < 1:
+        cm = int(metres * 100)
+        resStr = f"{cm}cm"
+    else:
+        m = int(metres)
+        resStr = f"{m}m"
+    return resStr
+
+
+def get_outfnames(outputBasename, psize=0.5, ptile_s=5, fpc_psize=10, chm_psize=0.2,
+        pptiles=(1, 5, 25, 50, 75, 95, 99), driverName='GTiff'):
     """
     Generate filenames for individually processed tiles and intermediate products.
 
@@ -204,80 +246,43 @@ def get_outfnames(
         dict: A dictionary where keys are product names and
               values are their corresponding filenames.
     """
-    # Convert resolutions to appropriate string formats
-    psize = f"r{int(psize * 100)}cm" if psize < 10 else f"r{int(psize)}m"
-    chm_psize = (
-        f"r{int(chm_psize * 100)}cm" if chm_psize < 10 else f"r{int(chm_psize)}m"
-    )
-    ptile_s = f"r{int(ptile_s * 100)}cm" if ptile_s < 10 else f"r{int(ptile_s)}m"
-    fpc_psize = (
-        f"r{int(fpc_psize * 100)}cm" if fpc_psize < 10 else f"r{int(fpc_psize)}m"
-    )
-
-    # Get product stage codes and reverse the dictionary for lookup
-    productDict = get_stageDict()
-    productNameToCode = {v: k for k, v in productDict.items()}
+    stdRes = resolutionStrFromMetres(psize)
+    fpcRes = resolutionStrFromMetres(fpc_psize)
+    chmRes = resolutionStrFromMetres(chm_psize)
+    pcntileRes = resolutionStrFromMetres(ptile_s)
 
     fnames = {}
 
-    # List of product names for which to generate filenames
-    products_with_psize = [
-        "grdR",
-        "intens",
-        "NonGrd_codes",
-        "dem",
-        "demHS",
-        "maxH",
-        "csm",
-        "fst_dens",
-    ]
+    for productName in stageByProductName:
+        stageCode = stageByProductName[productName]
+        outfile = qvf.setstagecode(outputBasename, stageCode)
+        outfile = qvf.setoptionfield(outfile, 'l', productName)
 
-    # Generate filenames for products with psize
-    for product_name in products_with_psize:
-        processing_code = productNameToCode.get(product_name)
-        if processing_code is None:
-            print(f"Processing code not found for product '{product_name}'")
-            continue
+        # Work out which resolution string to use
+        resStr = stdRes
+        if productName == "fpc":
+            resStr = fpcRes
+        elif productName == "chm":
+            resStr = chmRes
+        elif productName.startswith('percentile'):
+            resStr = pcntileRes
 
-        fnames[product_name] = (
-            f"{outputBasename}_{processing_code}_{product_name}_{psize}.tif"
-        )
-
-    # Handle percentile tiles
-    fnames["ptiles"] = {}
-    for pos, pptile in enumerate(pptiles):
-        product_name = f"{pptile}_percentile"
-        processing_code = productNameToCode.get(product_name)
-        if processing_code is None:
-            print(f"Processing code not found for product '{product_name}'")
-            continue
-
-        fnames["ptiles"][pos] = (
-            f"{outputBasename}_{processing_code}_{product_name}_{psize}.tif"
-        )
-
-    # Handle FPC product
-    product_name = "fpc"
-    processing_code = productNameToCode.get(product_name)
-    if processing_code is None:
-        print(f"Processing code not found for product '{product_name}'")
-    else:
-        fnames["fpc"] = (
-            f"{outputBasename}_{processing_code}_{product_name}_{fpc_psize}.tif"
-        )
-
-    # Handle CHM product
-    product_name = "chm"
-    processing_code = productNameToCode.get(product_name)
-    if processing_code is None:
-        print(f"Processing code not found for product '{product_name}'")
-    else:
-        fnames["chm"] = (
-            f"{outputBasename}_{processing_code}_{product_name}_{chm_psize}.tif"
-        )
+        outfile = qvf.setoptionfield(outfile, 'r', resStr)
+        suffix = getSuffixFromDriverName(driverName)
+        outfile = qvf.setsuffix(outfile, suffix)
+        fnames[productName] = outfile
 
     # Return the filenames dictionary
     return fnames
+
+
+def getSuffixFromDriverName(driverName):
+    """
+    Get the preferred suffix for the given GDAL driver name
+    """
+    drvr = gdal.GetDriverByName(driverName)
+    suffix = drvr.GetMetadataItem('DMD_EXTENSION')
+    return suffix
 
 
 def createTileDict(tile, tile_s):
