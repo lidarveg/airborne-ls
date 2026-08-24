@@ -99,9 +99,10 @@ def getCmdargs(inputargs):
         help="Split flight lines for FPC calculations.")
     parser.add_argument("--overwrite", default=False, action=argparse.BooleanOptionalAction,
         help="Overwrite existing layers without checking.")
-    parser.add_argument("--binmargin", type=int, default=25,
+    parser.add_argument("--binmargin", type=int, default=33,
         help=("Percentage of points from neighbouring bins to keep for per-bin " +
-            "interpolation (default=%(default)s)"))
+            "DEM interpolation (default=%(default)s). Smaller values will run faster, " +
+            "but too small can leave extra holes in DEM"))
 
     cmdargs = parser.parse_args(inputargs)
 
