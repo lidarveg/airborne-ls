@@ -375,22 +375,15 @@ def bin_data(indir, infile, tile_s, nbins):
     infileFull = Path(indir).joinpath(infile)
 
     # Parse metadata from the input file name
-    fn_dict = filenaming_methods.createTileDict(infile, tile_s)
+    where = qvf.getwhere(infile)
+    (easting, northing, utmZone) = filenaming_methods.decomposeWhereField(where)
 
     # Process neighbouring tiles
     for pos, p in enumerate(range(8)):
         # Determine the location of the neighbouring tile
-        where = f"x{int(fn_dict['xst'] + tile_idx[p, 0])}ys{int(fn_dict['yst'] + tile_idx[p, 1])}"
-        fn = "_".join(
-            (
-                fn_dict["components"][0],
-                where,
-                fn_dict["components"][2],
-                fn_dict["components"][3],
-                fn_dict["components"][4],
-            )
-        )
-        neighbourfile = Path(indir).joinpath(fn)
+        (xoffset, yoffset) = tile_idx[p]
+        neighbourWhere = filenaming_methods.neighbourTileWhere(where, xoffset, yoffset)
+        neighbourfile = qvf.setwhere(infile, neighbourWhere)
         # If the neighbouring file exists, process it
         if Path(neighbourfile).is_file():
             binSize, nbins, newIdx, data = read_laz_index(neighbourfile, tile_s)
@@ -414,7 +407,7 @@ def bin_data(indir, infile, tile_s, nbins):
             ct += 1
     del data
 
-    return bins, fn_dict["yst"], fn_dict["xst"], rowS
+    return bins, northing, easting, rowS
 
 
 ###################################################################################################
