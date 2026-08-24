@@ -228,6 +228,53 @@ def resolutionStrFromMetres(metres):
     return resStr
 
 
+def decomposeWhereField(where):
+    """
+    Break up the given where field and return the values of the sub-fields
+
+    Parameters:
+      where: A where field, of the form x<xCoord>ys<yCoord>z<utmZone>
+             Note that the 's' after the 'y' indicate UTM South
+
+    Returns:
+      (x, y, zone): The (X, Y) coordinates (metres) and the UTM zone (negative for South)
+    """
+    xNdx = where.find('x')
+    yNdx = where.find('y')
+    zNdx = where.find('z')
+    xCoord = int(where[xNdx + 1:yNdx])
+    yCoord = int(where[yNdx + 2:zNdx])
+    utmZone = int(where[zNdx + 1:])
+    if where[yNdx + 1] == 's':
+        utmZone = -utmZone
+    return (xCoord, yCoord, utmZone)
+
+
+def neighbourTileWhere(where, xOffset, yOffset):
+    """
+    Given the where field of a file name for a single tile of data, return the
+    where field for a neighbouring tile, based on the xOffset & yOffset parameters.
+
+    The X & Y offsets are taken to be in metres, and are exactly one tile in
+    some direction. So, for example, if the tile size is 1000m, then xOffset of -1000
+    would indicate the tile to the west, and a yOffset of +1000 would indicate the
+    tile to the north.
+
+    Parameters:
+      where (str): Where field for a single tile
+      xOffset (int): Offset (metres) in X direction to top-left of neighbour tile
+      yOffset (int): Offset (metres) in Y direction to top-left of neighbour tile
+
+    Returns:
+      nbrwhere (str): Where field of requested neighbouring tile
+    """
+    (xCoord, yCoord, utmZone) = decomposeWhereField(where)
+    newX = xCoord + int(xOffset)
+    newY = yCoord + int(yOffset)
+    newWhere = qvf.makeTileWhere(newX, newY, utmZone)
+    return newWhere
+
+
 def get_outfnames(outputBasename, psize=0.5, ptile_s=5, fpc_psize=10, chm_psize=0.2,
         pptiles=(1, 5, 25, 50, 75, 95, 99), driverName='GTiff'):
     """
