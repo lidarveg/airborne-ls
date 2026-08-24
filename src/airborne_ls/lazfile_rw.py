@@ -355,8 +355,8 @@ def bin_data(indir, infile, tile_s, nbins):
 
     Returns:
         tuple: A tuple containing:
-            - bins (dict): A dictionary where keys are bin names (e.g., "row_x_col_y") and
-                           values are data arrays.
+            - bins (dict): A dictionary where keys are bin names (e.g., "row_<row>_col_<col>")
+                           and values are data arrays.
             - yst (int): Starting Y-coordinate of the tile.
             - xst (int): Starting X-coordinate of the tile.
             - rowS (int): Number of rows in the grid.
@@ -375,22 +375,15 @@ def bin_data(indir, infile, tile_s, nbins):
     infileFull = Path(indir).joinpath(infile)
 
     # Parse metadata from the input file name
-    fn_dict = filenaming_methods.createTileDict(infile, tile_s)
+    where = qvf.getwhere(infile)
+    (easting, northing, utmZone) = filenaming_methods.decomposeWhereField(where)
 
     # Process neighbouring tiles
     for pos, p in enumerate(range(8)):
         # Determine the location of the neighbouring tile
-        where = f"x{int(fn_dict['xst'] + tile_idx[p, 0])}ys{int(fn_dict['yst'] + tile_idx[p, 1])}"
-        fn = "_".join(
-            (
-                fn_dict["components"][0],
-                where,
-                fn_dict["components"][2],
-                fn_dict["components"][3],
-                fn_dict["components"][4],
-            )
-        )
-        neighbourfile = Path(indir).joinpath(fn)
+        (xoffset, yoffset) = tile_idx[p]
+        neighbourWhere = filenaming_methods.neighbourTileWhere(where, xoffset, yoffset)
+        neighbourfile = qvf.setwhere(infileFull, neighbourWhere)
         # If the neighbouring file exists, process it
         if Path(neighbourfile).is_file():
             binSize, nbins, newIdx, data = read_laz_index(neighbourfile, tile_s)
@@ -398,7 +391,7 @@ def bin_data(indir, infile, tile_s, nbins):
 
             # Assign data to the appropriate bins
             for loc, val in enumerate(bb):
-                bin_name = f"row_{xbinID[pos][loc]}_col_{ybinID[pos][loc]}"
+                bin_name = f"row_{ybinID[pos][loc]}_col_{xbinID[pos][loc]}"
                 bins[bin_name] = np.copy(data[newIdx[int(val)] : newIdx[int(val + 1)]])
             del data
 
@@ -407,14 +400,14 @@ def bin_data(indir, infile, tile_s, nbins):
 
     # Assign data to bins for the main tile
     ct = 0
-    for col in np.flip(range(1, rowS + 1)):
-        for row in range(1, rowS + 1):
+    for row in np.flip(range(1, rowS + 1)):
+        for col in range(1, rowS + 1):
             bin_name = f"row_{row}_col_{col}"
             bins[bin_name] = np.copy(data[newIdx[ct] : newIdx[ct + 1]])
             ct += 1
     del data
 
-    return bins, fn_dict["yst"], fn_dict["xst"], rowS
+    return bins, northing, easting, rowS
 
 
 ###################################################################################################

@@ -6,6 +6,17 @@ file names.
 import os
 
 
+def isQvf(fullpath):
+    """
+    Return True if the given file name appears to be a QVF-style file name
+    """
+    fn = os.path.basename(fullpath)
+    basefn = fn.split('.')[0]
+    fields = basefn.split('_')
+    ok = (len(fields) >= 4 and len(fields[0]) == 6 and len(fields[3]) >= 5)
+    return ok
+
+
 def getfields(fullpath):
     """
     Return the fields list of the given full path (reverse of assemblefields)

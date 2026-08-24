@@ -218,24 +218,15 @@ def neighbourTileFilename(tilefile, xOffset, yOffset):
       nbrfile (str): File name of requested neighbouring tile
     """
     where = qvf.getwhere(tilefile)
-    xNdx = where.find('x')
-    yNdx = where.find('y')
-    zNdx = where.find('z')
-    xCoord = int(where[xNdx + 1:yNdx])
-    yCoord = int(where[yNdx + 2:zNdx])
-    newX = xCoord + int(xOffset)
-    newY = yCoord + int(yOffset)
-    utmZone = int(where[zNdx + 1:])
-    if where[yNdx + 1] == 's':
-        utmZone = -utmZone
-    newWhere = qvf.makeTileWhere(newX, newY, utmZone)
+    newWhere = filenaming_methods.neighbourTileWhere(where, xOffset, yOffset)
     nbrfileFull = qvf.setwhere(tilefile, newWhere)
 
     # We probably also need to change the where field in the directory name
     (nbrdir, nbrfile) = os.path.split(nbrfileFull)
-    if where == qvf.getwhere(nbrdir):
-        nbrdir = qvf.setwhere(nbrdir, newWhere)
-        nbrfileFull = os.path.join(nbrdir, nbrfile)
+    if qvf.isQvf(nbrdir):
+        if where == qvf.getwhere(nbrdir):
+            nbrdir = qvf.setwhere(nbrdir, newWhere)
+            nbrfileFull = os.path.join(nbrdir, nbrfile)
 
     return nbrfileFull
 
