@@ -99,6 +99,9 @@ def getCmdargs(inputargs):
         help="Split flight lines for FPC calculations.")
     parser.add_argument("--overwrite", default=False, action=argparse.BooleanOptionalAction,
         help="Overwrite existing layers without checking.")
+    parser.add_argument("--binmargin", type=int, default=25,
+        help=("Percentage of points from neighbouring bins to keep for per-bin " +
+            "interpolation (default=%(default)s)"))
 
     cmdargs = parser.parse_args(inputargs)
 
@@ -240,26 +243,30 @@ def run_tile_products(cmdargs):
             for rowB in range(1, rowS + 1, 1):
                 for colB in range(1, rowS + 1, 1):
                     fnc = f"row_{rowB}_col_{colB}"
+                    binTopLeftX = easting + binSize * (colB - 1)
+                    binTopLeftY = northing - cmdargs.tile_s + binSize * rowB
                     binChunk = np.copy(bData[fnc])  # reset as we don't need buffer
                     chunk = np.copy(bData[fnc])
                     if len(chunk) > 10:
                         for n8 in neigh8:
                             fn = f"row_{int(rowB + n8[0])}_col_{int(colB + n8[1])}"
-                            temp8 = np.copy(bData[fn])
-                            if (temp8.shape)[0] > 1:
-                                chunk = np.concatenate((chunk, temp8))
+                            nbrBinData = np.copy(bData[fn])
+                            if (nbrBinData.shape)[0] > 1:
+                                nbrBinData = trimNeighbourBin(nbrBinData, n8[0], n8[1],
+                                    cmdargs.binmargin, binTopLeftX, binTopLeftY, binSize)
+                                chunk = np.concatenate((chunk, nbrBinData))
 
                         # run dem
                         grdhits = chunk["CLASSIFICATION"] == 2
                         if np.sum(grdhits) > 10:
                             # Set up a slice object for the part of the main tile arrays
                             # covering the current bin. Applies only to arrays of tileShape
-                            xst = int(int((rowB - 1) * binSize) / cmdargs.psize)
-                            yst = int(int((rowS - colB) * binSize) / cmdargs.psize)
+                            xst = int(int((colB - 1) * binSize) / cmdargs.psize)
+                            yst = int(int((rowS - rowB) * binSize) / cmdargs.psize)
                             binSlice = (slice(yst, (yst + nRows)), slice(xst, (xst + nRows)))
 
-                            xst_bin = easting + int((rowB - 1) * binSize)
-                            yst_bin = northing - int((rowS - colB) * binSize)
+                            xst_bin = easting + int((colB - 1) * binSize)
+                            yst_bin = northing - int((rowS - rowB) * binSize)
                             if np.sum(grdhits) > 0:
                                 dem = gridding_methods.makeDemTile(
                                     chunk["X"][grdhits], chunk["Y"][grdhits],
@@ -390,8 +397,8 @@ def run_tile_products(cmdargs):
                                     binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
                                     binSize, heightAboveGround, cmdargs.ptile_s,
                                     pptiles=percentiles, nullVal=nullVal))
-                            xst_pct = int(int((rowB - 1) * binSize) / cmdargs.ptile_s)
-                            yst_pct = int(int((rowS - colB) * binSize) / cmdargs.ptile_s)
+                            xst_pct = int(int((colB - 1) * binSize) / cmdargs.ptile_s)
+                            yst_pct = int(int((rowS - rowB) * binSize) / cmdargs.ptile_s)
                             pctTile[
                                 :,
                                 yst_pct : (yst_pct + nRows_pct),
@@ -400,8 +407,8 @@ def run_tile_products(cmdargs):
 
                             ############################
                             # run FPC
-                            xst_fpc = int(int((rowB - 1) * binSize) / cmdargs.fpc_psize)
-                            yst_fpc = int(int((rowS - colB) * binSize) / cmdargs.fpc_psize)
+                            xst_fpc = int(int((colB - 1) * binSize) / cmdargs.fpc_psize)
+                            yst_fpc = int(int((rowS - rowB) * binSize) / cmdargs.fpc_psize)
                             nRows_fpc = int(np.ceil(binSize / cmdargs.fpc_psize))
                             # nCols_fpc = int(np.ceil(binSize / cmdargs.fpc_psize))
 
@@ -586,6 +593,71 @@ def check_divisible(psizes):
             if (100.0 % psize) != 0:
                 msg = f"error: cmdargs.{pName[loc]} {psize} not divisible"
                 sys.exit(msg)
+
+
+def trimNeighbourBin(data, binRowOff, binColOff, binMargin, topLeftX, topLeftY, binSize):
+    """
+    Trim off the points in a neighbouring bin, so that we are left with only
+    those points close to the central bin.
+
+    Bin row/col offsets define which neighbour direction this bin lies from the
+    central bin. They were added to the bin row/col number to get the neighour bin
+    row/col. The LAZ file point index as presented with row/col numbering starting
+    at 1 in the bottom-left bin, and increasing eastwards and northwards.
+
+    Parameters:
+      data: Point data for the whole of the bin to be trimmed
+      binRowOff, binColOff: Bin row & col offsets, relative to central bin
+      binMragin: Percentage of the data to keep in the trimmed data
+      topLeftX, topLeftY: (X, y) coordinates of the top-left corner of the
+                          central bin, in metres
+      binSize: Size of the bin (along one edge) in metres
+
+    Returns:
+      trimmedData: The subset of the given point data which lies closest
+                   to the central bin
+    """
+    # Point (X, Y) coords
+    x = data['X']
+    y = data['Y']
+
+    # There ar two main cases. In one case, we want the whole of one edge of the bin,
+    # on the other we want one corner of the bin. The first case will have one
+    # of the offset values equal to zero, the second case will have both non-zero
+    if 0 in (binRowOff, binColOff):
+        # Choose the coordinate (either X or Y) on which to select points. We calculate
+        # the perpendicular distance of each point from the relevant edge of the central bin
+        if binColOff == -1:
+            dist = topLeftX - x
+        elif binColOff == 1:
+            dist = x - (topLeftX + binSize)
+        elif binRowOff == -1:
+            dist = topLeftY - binSize - y
+        elif binRowOff == 1:
+            dist = y - topLeftY
+    else:
+        # The coordinate to select on is distance from the corner point, rather than a single
+        # coordinate. Use the offset values to work out the corner (X, Y) coords, then
+        # calculate Euclidean distance from that
+        cnrX = topLeftX
+        if binColOff == 1:
+            cnrX = topLeftX + binSize
+        cnrY = topLeftY
+        if binRowOff == -1:
+            cnrY = topLeftY - binSize
+
+        # The Euclidean distance is the "coordinate" on which we will select points
+        dist = np.sqrt((x - cnrX) ** 2 + (y - cnrY) ** 2)
+
+        # Adjust the binMargin because we only want the corner. In effect we square the proportion
+        binMargin = int(100 * (binMargin / 100) ** 2)
+
+    # A mask for the points with distance smaller than the given percentile
+    threshold = np.percentile(dist, binMargin)
+    keepMask = (dist < threshold)
+
+    trimmedData = data[keepMask]
+    return trimmedData
 
 
 ###############################################################################################
