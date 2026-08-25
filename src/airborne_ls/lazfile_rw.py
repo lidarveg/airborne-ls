@@ -138,12 +138,6 @@ def standardise_lasf(what, when, utmZone, stageCode, projectName, outdr,
             tileWhere = qvf.makeTileWhere(easting, northing, utmZone)
             outFile = qvf.setwhere(outfileTemplate, tileWhere)
 
-            # simply exclude points outside the tile extents + irrelevant codes/data
-            # 7 = low point noise, 18 = high point noise.. note some providers can use
-            # different / new code
-            # z-thresholds are problematic.. as you can have negative elevation and what
-            # upper limit? for aus 3000m works
-
             # Exclude points which are outside the tile to be output
             good_indices = (
                 (
