@@ -136,3 +136,25 @@ def doFPC(xMin, yMax, data, flightLines, heightAboveGround, fpc_size, tile_s,
         fpc[nullArray] = nullVal
 
     return fpc
+
+
+def makeFPCcolorTable():
+    """
+    Create an array of the colours we use for the FPC images.
+
+    The returned array has shape (256, 3), and type uint8. The columns are
+    red/green/blue values, in the range [0, 255]. This is suitable for use
+    with the rw_image_methods.setColorTable function.
+
+    Returns:
+      clrTblArr: Array of RGB values
+    """
+    clrTblArr = np.full((256, 3), 255, dtype=np.uint8)
+    clrTblArr[10:90, 0] = np.mgrid[255:0:-80j].round().astype(np.uint8)
+    clrTblArr[90:101, 0] = 0
+    clrTblArr[:, 2] = clrTblArr[:, 0]
+    clrTblArr[10:90, 1] = np.mgrid[255:100:-80j].round().astype(np.uint8)
+    clrTblArr[90:101, 1] = 100
+    clrTblArr[0, :] = [210, 180, 140]  # Add brown for zero FPC
+
+    return clrTblArr
