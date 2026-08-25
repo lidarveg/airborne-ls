@@ -35,13 +35,20 @@ import laspy
 import numpy as np
 from osgeo import osr
 
-from airborne_ls import lazfile_rw
+from airborne_ls import lazfile_rw, const
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
     level=logging.ERROR, format="%(asctime)s: %(name)20s: %(levelname)10s: %(message)s"
 )
 osr.UseExceptions()
+
+
+DFLT_CLASSESTOEXCLUDE = ",".join([
+    str(const.PTCLASS_NOISE_LOWPOINT),
+    str(const.PTCLASS_NOISE_HIGHPOINT),
+    str(const.PTCLASS_NOISE_PROVIDERDEFINED)
+])
 
 
 def getCmdargs(inputargs):
@@ -85,6 +92,9 @@ def getCmdargs(inputargs):
         help="Six-character project name (e.g., 'brisba').")
     parser.add_argument("--year", type=int, required=True,
         help="Year of data capture (e.g., 2022).")
+    parser.add_argument("--excludeclasses", default=DFLT_CLASSESTOEXCLUDE,
+        help=("List of point class values to exclude from data. Comma-separated, " +
+              "no spaces. (default=%(default)s)"))
 
     # Tile indexing options
     parser.add_argument("--binSize", default=50.0, type=float,
@@ -183,9 +193,10 @@ def run_las_standardisation(cmdargs):
             np.floor(np.median(data.x[data.x > 0]) / input_tileS) * input_tileS)
 
         # Run chunked LAS filtering
+        classesToExclude = [int(i) for i in cmdargs.excludeclasses.split(',')]
         _ = lazfile_rw.standardise_lasf(what, when, utmZone, stageCode,
                 cmdargs.proj, cmdargs.outdr, data, easting, northing, input_tileS,
-                cmdargs.out_tile_s, cmdargs.binSize, inLazfile)
+                cmdargs.out_tile_s, cmdargs.binSize, inLazfile, classesToExclude)
 
         del data
 

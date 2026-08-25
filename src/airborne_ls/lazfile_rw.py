@@ -98,7 +98,8 @@ def laspy2rec(infile):
 
 ###################################################################################################
 def standardise_lasf(what, when, utmZone, stageCode, projectName, outdr,
-        data, easting, northing, tile_s, out_tile_s, binSize, filename_Parent):
+        data, easting, northing, tile_s, out_tile_s, binSize, filename_Parent,
+        classesToExclude):
     """
     Using laspy, rename file using naming convention, add index, remove noise and write out
     supplied files to .laz
@@ -113,6 +114,8 @@ def standardise_lasf(what, when, utmZone, stageCode, projectName, outdr,
         out_tile_s (float): Size of the output tile (metres).
         binSize (float): Bin size for indexing (metres).
         filename_Parent (str): Parent filename for metadata tracking.
+        classesToExclude (list): List of integer point classification values to exclude
+                                 from the data
 
     Returns:
         str: Status message indicating the result of the processing.
@@ -149,10 +152,10 @@ def standardise_lasf(what, when, utmZone, stageCode, projectName, outdr,
                     & ((northing_new - out_tile_s + 0.001) < data.y)
                 )
                 & ((-10.0 < data.z) & (3000.0 > data.z))
-                & (data.classification != 7)
-                & (data.classification != 18)
-                & (data.classification != 64)
             )
+            # Exclude any point classes the user requested
+            for classVal in classesToExclude:
+                good_indices = (good_indices & (data.classification != classVal))
 
             if np.sum(good_indices) > 0:
                 data2 = data[good_indices]
