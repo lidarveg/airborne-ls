@@ -62,46 +62,12 @@ def writeImage(image, outfile, cmdargs, driver="GTiff", tlx=0.0, tly=0.0,
         proj.ImportFromEPSG(epsg)
         ds.SetProjection(proj.ExportToWkt())
 
-    # set colour table for bb4
-    if outfile.find("NonGrdCodes") > 0:
-        colors = gdal.ColorTable()
-        # set color for each value
-        colors.SetColorEntry(0, (254, 254, 254))  # never classified:
-        colors.SetColorEntry(1, (200, 200, 200))  # unclassified: light gray
-        colors.SetColorEntry(2, (0, 0, 0))        # ground classification
-        colors.SetColorEntry(3, (0, 240, 0))      # low veg: green1
-        colors.SetColorEntry(4, (0, 160, 0))      # medium veg: green2
-        colors.SetColorEntry(5, (0, 80, 0))       # high veg: green3
-        colors.SetColorEntry(6, (255, 0, 0))      # building: red
-        colors.SetColorEntry(7, (255, 255, 0))
-        colors.SetColorEntry(8, (255, 255, 0))
-        colors.SetColorEntry(9, (0, 0, 255))      # blue for water
-        colors.SetColorEntry(10, (255, 0, 255))
-        colors.SetColorEntry(11, (255, 20, 255))
-        colors.SetColorEntry(12, (255, 30, 255))
-        colors.SetColorEntry(13, (255, 40, 255))
-        colors.SetColorEntry(14, (255, 50, 255))
-        colors.SetColorEntry(15, (255, 60, 255))
-        colors.SetColorEntry(16, (255, 70, 255))
-        colors.SetColorEntry(17, (255, 80, 255))
-        colors.SetColorEntry(18, (255, 90, 255))
-        colors.SetColorEntry(19, (255, 100, 255))
-        colors.SetColorEntry(254, (101, 67, 33))  # brown for background
-
     if nz > 1:
         for i in range(nz):
             band = ds.GetRasterBand(i + 1)
-            # set color table and color interpretation
-            if outfile.find("NonGrdCodes") > 0:
-                band.SetRasterColorTable(colors)
-                band.SetRasterColorInterpretation(gdal.GCI_PaletteIndex)
             band.WriteArray(image[i, :, :], 0, 0)
     else:
         band = ds.GetRasterBand(1)
-        # set color table and color interpretation
-        if outfile.find("NonGrdCodes") > 0:
-            band.SetRasterColorTable(colors)
-            band.SetRasterColorInterpretation(gdal.GCI_PaletteIndex)
         band.WriteArray(image, 0, 0)
 
     # Set the null value on every band
@@ -227,3 +193,31 @@ def get_mmXYZ(x, y, z):
 
 
 ###################################################################################################
+
+
+def setColorTable(imgfile, clrTblArr):
+    """
+    Set the colour table on the given Byte image file.
+
+    The colour table is given as a 2D array of shape (256, 3). Each row is
+    a colour. The i-th row is the red/green/blue values for the pixel value i.
+    The RGB values are integers in the range [0, 255].
+
+    The colour table is set only on the first band of the image file.
+
+    Parameters:
+      imgfile (str): Name of image file
+      clrTblArr (2-d array): Colour table values
+    """
+    if clrTblArr.shape != (256, 3):
+        raise ValueError("clrTblArr must be shape (256, 3)")
+
+    ds = gdal.Open(imgfile, gdal.GA_Update)
+    bandobj = ds.GetRasterBand(1)
+
+    clrTbl = gdal.ColorTable()
+    for i in range(len(clrTblArr)):
+        colEntry = tuple(clrTblArr[i])
+        clrTbl.SetColorEntry(i, colEntry)
+    bandobj.SetRasterColorTable(clrTbl)
+    bandobj.SetRasterColorInterpretation(gdal.GCI_PaletteIndex)

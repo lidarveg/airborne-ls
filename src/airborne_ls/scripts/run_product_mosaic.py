@@ -15,9 +15,7 @@ import os
 import sys
 from pathlib import Path
 
-import numpy as np
 from osgeo import gdal
-from rios import rat
 
 from airborne_ls import filenaming_methods, qvf
 
@@ -159,25 +157,6 @@ def runMerge(cmdargs):
         gdal.Translate(outFile, vrtFilename, options=translateOptions)
 
         os.remove(vrtFilename)
-
-
-def applyFPCcolor(fout):
-    """
-    Apply a colour map to the FPC (Foliage Profile Curve) output.
-
-    Parameters:
-        fout (str): Path to the FPC output file.
-    """
-    clrTbl = np.zeros((256, 4), dtype=np.uint8)
-    clrTbl.fill(255)
-    clrTbl[10:90, 0] = np.mgrid[255:0:-80j].round().astype(np.uint8)
-    clrTbl[90:101, 0] = 0
-    clrTbl[:, 2] = clrTbl[:, 0]
-    clrTbl[10:90, 1] = np.mgrid[255:100:-80j].round().astype(np.uint8)
-    clrTbl[90:101, 1] = 100
-    clrTbl[0, :] = [210, 180, 140, 255]  # Add brown for zero FPC
-
-    rat.setColorTable(fout, clrTbl)
 
 
 def main(args=None):

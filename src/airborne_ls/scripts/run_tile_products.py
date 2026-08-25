@@ -33,7 +33,6 @@ from pathlib import Path
 
 import laspy
 import numpy as np
-from rios import rat
 from scipy import ndimage
 from osgeo import gdal
 
@@ -491,7 +490,13 @@ def run_tile_products(cmdargs):
                 np.rint(fpcTile).astype(np.uint8), outfnames["fpc"], cmdargs,
                 tlx=easting, tly=northing, binsize=cmdargs.fpc_psize, epsg=cmdargs.epsg,
                 nullVal=rtnClassNull, parent_file=infileFull)
-            applyFPCcolor(outfnames["fpc"])
+
+            # Apply colour tables
+            fpcClrTbl = fpc_method.makeFPCcolorTable()
+            rw_image_methods.setColorTable(outfnames["fpc"], fpcClrTbl)
+            nonGrdClrTbl = makeNonGroundClrTbl()
+            rw_image_methods.setColorTable(outfnames["NonGrdCodes"], nonGrdClrTbl)
+
             logger.info(f"Tiles written to file {infileFull}")
 
             demOptions = gdal.DEMProcessingOptions(computeEdges=True)
@@ -536,36 +541,6 @@ def reorder_flist(lazlistfull):
     file_sizes = [Path(ff).stat().st_size for ff in lazlistfull]
     sorted_indices = np.argsort(-np.array(file_sizes))  # Sort in descending order
     return np.array(lazlistfull)[sorted_indices]
-
-
-###################################################################################################
-def applyFPCcolor(fout):
-    """
-    Apply a colour map to the FPC (Foliage Projective Cover) output.
-
-    Parameters:
-        fout (str): Path to the FPC output file.
-    """
-    # Create a colour table with 256 entries (RGBA format)
-    clrTbl = np.zeros((256, 4), dtype=np.uint8)
-    clrTbl.fill(255)  # Default to white with full opacity
-
-    # Define the red channel gradient
-    clrTbl[10:90, 0] = np.mgrid[255:0:-80j].round().astype(np.uint8)
-    clrTbl[90:101, 0] = 0
-
-    # Define the blue channel (same as red)
-    clrTbl[:, 2] = clrTbl[:, 0]
-
-    # Define the green channel gradient
-    clrTbl[10:90, 1] = np.mgrid[255:100:-80j].round().astype(np.uint8)
-    clrTbl[90:101, 1] = 100
-
-    # Add a brown colour for zero FPC
-    clrTbl[0, :] = [210, 180, 140, 255]
-
-    # Apply the colour table to the output file
-    rat.setColorTable(fout, clrTbl)
 
 
 def check_divisible(psizes):
@@ -658,6 +633,43 @@ def trimNeighbourBin(data, binRowOff, binColOff, binMargin, topLeftX, topLeftY, 
 
     trimmedData = data[keepMask]
     return trimmedData
+
+
+def makeNonGroundClrTbl():
+    """
+    Create a colour table array for the nonGrdCodes image
+
+    The returned array has shape (256, 3), and type uint8. The columns are
+    red/green/blue values, in the range [0, 255]. This is suitable for use
+    with the rw_image_methods.setColorTable function.
+
+    Returns:
+      clrTblArr: Array of RGB values
+    """
+    clrTblArr = np.full((256, 3), 255, dtype=np.uint8)
+    clrTblArr[0] = (254, 254, 254)  # never classified:
+    clrTblArr[1] = (200, 200, 200)  # unclassified: light gray
+    clrTblArr[2] = (0, 0, 0)        # ground classification
+    clrTblArr[3] = (0, 240, 0)      # low veg: green1
+    clrTblArr[4] = (0, 160, 0)      # medium veg: green2
+    clrTblArr[5] = (0, 80, 0)       # high veg: green3
+    clrTblArr[6] = (255, 0, 0)      # building: red
+    clrTblArr[7] = (255, 255, 0)
+    clrTblArr[8] = (255, 255, 0)
+    clrTblArr[9] = (0, 0, 255)      # blue for water
+    clrTblArr[10] = (255, 0, 255)
+    clrTblArr[11] = (255, 20, 255)
+    clrTblArr[12] = (255, 30, 255)
+    clrTblArr[13] = (255, 40, 255)
+    clrTblArr[14] = (255, 50, 255)
+    clrTblArr[15] = (255, 60, 255)
+    clrTblArr[16] = (255, 70, 255)
+    clrTblArr[17] = (255, 80, 255)
+    clrTblArr[18] = (255, 90, 255)
+    clrTblArr[19] = (255, 100, 255)
+    clrTblArr[254] = (101, 67, 33)  # brown for background
+
+    return clrTblArr
 
 
 ###############################################################################################
