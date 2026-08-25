@@ -99,7 +99,7 @@ def laspy2rec(infile):
 ###################################################################################################
 def standardise_lasf(what, when, utmZone, stageCode, projectName, outdr,
         data, easting, northing, tile_s, out_tile_s, binSize, filename_Parent,
-        classesToExclude):
+        classesToExclude, minZ, maxZ):
     """
     Using laspy, rename file using naming convention, add index, remove noise and write out
     supplied files to .laz
@@ -108,14 +108,16 @@ def standardise_lasf(what, when, utmZone, stageCode, projectName, outdr,
         fn_base (str): Base filename for output files.
         outdr (str): Output directory for processed files.
         data (laspy.LasData): LAS/LAZ data to process.
-        easting (float): Easting coordinate of the tile.
-        northing (float): Northing coordinate of the tile.
+        easting (float): Easting coordinate of top-left corner of the tile.
+        northing (float): Northing coordinate of top-left corner of the tile.
         tile_s (float): Size of the input tile (metres).
         out_tile_s (float): Size of the output tile (metres).
         binSize (float): Bin size for indexing (metres).
         filename_Parent (str): Parent filename for metadata tracking.
         classesToExclude (list): List of integer point classification values to exclude
                                  from the data
+        minZ, maxZ (float): Min and max acceptable values (metres) for point height.
+                            Heights outside this range will be discarded as errors.
 
     Returns:
         str: Status message indicating the result of the processing.
@@ -136,12 +138,7 @@ def standardise_lasf(what, when, utmZone, stageCode, projectName, outdr,
             tileWhere = qvf.makeTileWhere(easting, northing, utmZone)
             outFile = qvf.setwhere(outfileTemplate, tileWhere)
 
-            # simply exclude points outside the tile extents + irrelevant codes/data
-            # 7 = low point noise, 18 = high point noise.. note some providers can use
-            # different / new code
-            # z-thresholds are problematic.. as you can have negative elevation and what
-            # upper limit? for aus 3000m works
-
+            # Exclude points which are outside the tile to be output
             good_indices = (
                 (
                     (float(easting_new + out_tile_s - 0.001) > data.x)
@@ -151,8 +148,9 @@ def standardise_lasf(what, when, utmZone, stageCode, projectName, outdr,
                     ((northing_new - 0.001) >= data.y)
                     & ((northing_new - out_tile_s + 0.001) < data.y)
                 )
-                & ((-10.0 < data.z) & (3000.0 > data.z))
             )
+            # Exclude points outside acceptable height range
+            good_indices = (good_indices & ((minZ < data.z) & (data.z < maxZ)))
             # Exclude any point classes the user requested
             for classVal in classesToExclude:
                 good_indices = (good_indices & (data.classification != classVal))

@@ -49,6 +49,11 @@ DFLT_CLASSESTOEXCLUDE = ",".join([
     str(const.PTCLASS_NOISE_HIGHPOINT),
     str(const.PTCLASS_NOISE_PROVIDERDEFINED)
 ])
+# Default min/max acceptable values (metres) for point height. These are good for
+# Australian continent, although the Antarctic Territories have some higher points
+# (e.g. Mt McClintock, 3490m).
+DFLT_MINZ = -20         # Lower than Lake Eyre/Kati Thanda
+DFLT_MAXZ = 2300        # Higher than Mt Kosciuszko
 
 
 def getCmdargs(inputargs):
@@ -95,6 +100,10 @@ def getCmdargs(inputargs):
     parser.add_argument("--excludeclasses", default=DFLT_CLASSESTOEXCLUDE,
         help=("List of point class values to exclude from data. Comma-separated, " +
               "no spaces. (default=%(default)s)"))
+    parser.add_argument("--minz", type=float, default=DFLT_MINZ,
+        help="Minimum acceptable point height value (metres) (default=%(default)s)")
+    parser.add_argument("--maxz", type=float, default=DFLT_MAXZ,
+        help="Maximum acceptable point height value (metres) (default=%(default)s)")
 
     # Tile indexing options
     parser.add_argument("--binSize", default=50.0, type=float,
@@ -196,7 +205,8 @@ def run_las_standardisation(cmdargs):
         classesToExclude = [int(i) for i in cmdargs.excludeclasses.split(',')]
         _ = lazfile_rw.standardise_lasf(what, when, utmZone, stageCode,
                 cmdargs.proj, cmdargs.outdr, data, easting, northing, input_tileS,
-                cmdargs.out_tile_s, cmdargs.binSize, inLazfile, classesToExclude)
+                cmdargs.out_tile_s, cmdargs.binSize, inLazfile, classesToExclude,
+                cmdargs.minz, cmdargs.maxz)
 
         del data
 
