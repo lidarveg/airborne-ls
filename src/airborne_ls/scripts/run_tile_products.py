@@ -38,6 +38,7 @@ from scipy import ndimage
 from osgeo import gdal
 
 from airborne_ls import (
+    const,
     filenaming_methods,
     fpc_method,
     gridding_methods,
@@ -52,8 +53,6 @@ logging.basicConfig(
 
 
 # Default constants
-firstReturnCode = 1
-CLASSIFICATION_GROUND = 2
 las_st = "ul"  # Requires filename to use upper-left naming convention
 percentiles = [1, 5, 25, 50, 75, 95, 99]
 rtnClassNull = 255
@@ -258,7 +257,7 @@ def run_tile_products(cmdargs):
                                 chunk = np.concatenate((chunk, nbrBinData))
 
                         # run dem
-                        grdhits = chunk["CLASSIFICATION"] == 2
+                        grdhits = (chunk["CLASSIFICATION"] == const.PTCLASS_GROUND)
                         if np.sum(grdhits) > 10:
                             # Set up a slice object for the part of the main tile arrays
                             # covering the current bin. Applies only to arrays of tileShape
@@ -289,7 +288,7 @@ def run_tile_products(cmdargs):
                             csmTile[csmTile < -5] = np.nan
                             #######################################################################
                             # interp to irregular grid
-                            nonGround = binChunk["CLASSIFICATION"] != 2
+                            nonGround = (binChunk["CLASSIFICATION"] != const.PTCLASS_GROUND)
                             # , groundMask = (
                             #     binChunk["CLASSIFICATION"] != 2,
                             #     binChunk["CLASSIFICATION"] == 2,)
@@ -337,10 +336,10 @@ def run_tile_products(cmdargs):
                             # CREATE Canopy Height Model
                             # refer Khosravipour_2014 pit-free
                             number_veg_rets = np.sum(
-                                binChunk["CLASSIFICATION"] == 4
+                                binChunk["CLASSIFICATION"] == const.PTCLASS_MEDIUMVEGETATION
                             ) + np.sum(
-                                binChunk["CLASSIFICATION"] == 5
-                            )  # could drop / add classification value of 3
+                                binChunk["CLASSIFICATION"] == const.PTCLASS_HIGHVEGETATION
+                            )  # could drop / add classification value of 3 (i.e. low veg)
                             if number_veg_rets > 10:
                                 (row_chm, col_chm) = gridding_methods.xyToRowCol(
                                     binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
@@ -359,14 +358,14 @@ def run_tile_products(cmdargs):
                                     row_chm, col_chm, heightAboveGround, maxH_hag
                                 )
                                 maxH_vals = (
-                                    chunk["CLASSIFICATION"] <= 5
+                                    chunk["CLASSIFICATION"] <= const.PTCLASS_HIGHVEGETATION
                                 )  # this includes unclassified returns.. not sure of zero?
                                 chunk_hag = gridding_methods.createHeightAboveGround(
                                     maxH_vals, chunk["X"], chunk["Y"], chunk["Z"],
                                     chunk["X"][grdhits], chunk["Y"][grdhits], chunk["Z"][grdhits])
                                 vals = np.logical_and(
-                                    chunk["CLASSIFICATION"] >= 3,
-                                    chunk["CLASSIFICATION"] <= 5,
+                                    chunk["CLASSIFICATION"] >= const.PTCLASS_LOWVEGETATION,
+                                    chunk["CLASSIFICATION"] <= const.PTCLASS_HIGHVEGETATION,
                                 )
                                 if np.sum(vals) > 5:
                                     chmVeg = gridding_methods.chm_alg(

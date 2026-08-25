@@ -9,6 +9,8 @@ import pynninterp
 from numba import jit
 from scipy import ndimage
 
+from airborne_ls import const
+
 # ----------------------------------------------------------------------------------------------------
 # DEM Generation Functions
 # ----------------------------------------------------------------------------------------------------
@@ -168,7 +170,7 @@ def maxH_workflow_layers(row, col, x, y, z, intensity, classi,
             yArr[r, c] = y[i]
             zArr[r, c] = z[i]
             intensityAtMaxH[r, c] = intensity[i]
-        if classi[i] == 2:
+        if classi[i] == const.PTCLASS_GROUND:
             haveGroundReturn[r, c] = 1
         else:
             nonGroundClasses[r, c] = np.uint(classi[i])
