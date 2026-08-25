@@ -608,7 +608,7 @@ def trimNeighbourBin(data, binRowOff, binColOff, binMargin, topLeftX, topLeftY, 
     Parameters:
       data: Point data for the whole of the bin to be trimmed
       binRowOff, binColOff: Bin row & col offsets, relative to central bin
-      binMragin: Percentage of the data to keep in the trimmed data
+      binMargin: Percentage of the data to keep in the trimmed data
       topLeftX, topLeftY: (X, y) coordinates of the top-left corner of the
                           central bin, in metres
       binSize: Size of the bin (along one edge) in metres
