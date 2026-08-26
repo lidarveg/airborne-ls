@@ -25,5 +25,11 @@ dev = [
     "ruff>=0.16.1",
 ]
 
+[project.scripts]
+run_lidar_standardisation = "airborne_ls.scripts.run_lidar_standardisation:main"
+run_tile_products = "airborne_ls.scripts.run_tile_products:main"
+run_dem_correction = "airborne_ls.scripts.run_dem_correction:main"
+run_product_mosaic = "airborne_ls.scripts.run_product_mosaic:main"
+
 [[tool.uv.index]]
 url = "https://gitlab.com/api/v4/projects/64206106/packages/pypi/simple"
