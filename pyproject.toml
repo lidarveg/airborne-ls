@@ -8,7 +8,7 @@ packages = ["src/airborne_ls"]
 [project]
 name = "airborne-ls"
 version = "0.1.0"
-description = "Add your description here"
+description = "Calculate terrain and vegetation products from airborne laser scanner data"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
