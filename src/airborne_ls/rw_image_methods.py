@@ -13,19 +13,29 @@ from osgeo import gdal, osr, gdal_array
 gdal.UseExceptions()
 
 
+creationOptionsByDriver = {
+    "GTiff": ["COMPRESS=DEFLATE", "TILED=YES", "INTERLEAVE=BAND", "BIGTIFF=IF_SAFER"],
+    "HFA": ["COMPRESSED=YES", "IGNOREUTM=YES"],
+    "KEA": [],
+    # COG is only used for the mosaics
+    "COG": ["COMPRESS=DEFLATE", "BLOCKSIZE=256", "RESAMPLING=BILINEAR", "BIGTIFF=IF_SAFER"]
+}
+
+
 ###################################################################################################
 
 
-def writeImage(image, outfile, cmdargs, driver="GTiff", tlx=0.0, tly=0.0,
+def writeImage(image, outfile, cmdargs, driverName="GTiff", tlx=0.0, tly=0.0,
                binsize=0.0, epsg=None, nullVal=None, parent_file=None,
-               overviewResampling="BILINEAR", overviewLevels=[4, 8, 16, 32, 64]):
+               overviewResampling="BILINEAR", overviewLevels=[4, 8, 16, 32, 64],
+               creationoptions=None):
     """
     Write data to a GDAL supported image file format
 
     Parameters:
     - image: The image data array.
     - outfile: The output filename.
-    - driver: The GDAL driver to use.
+    - driverName: The GDAL driver to use.
     - tlx, tly: Top-left x and y coordinates.
     - binsize: Pixel size.
     - epsg: EPSG code for spatial reference.
@@ -46,7 +56,7 @@ def writeImage(image, outfile, cmdargs, driver="GTiff", tlx=0.0, tly=0.0,
         nz = 1
     if len(image.shape) == 3:
         nz, ny, nx = image.shape
-    driver = gdal.GetDriverByName(driver)
+    drvr = gdal.GetDriverByName(driverName)
     dt = image.dtype
 
     # Map numpy dtype to GDAL data type
@@ -54,7 +64,10 @@ def writeImage(image, outfile, cmdargs, driver="GTiff", tlx=0.0, tly=0.0,
     if gdaldtype is None:
         raise ValueError(f"Unsupported data type: {dt}")
 
-    ds = driver.Create(outfile, nx, ny, nz, gdaldtype)
+    if creationoptions is None:
+        creationoptions = creationOptionsByDriver.get(driverName, [])
+
+    ds = drvr.Create(outfile, nx, ny, nz, gdaldtype, options=creationoptions)
     ds.SetGeoTransform([tlx, binsize, 0, tly, 0, -binsize])
 
     if epsg is not None:
