@@ -41,3 +41,21 @@ The `pyproject.toml` specifies exact versions for all dependencies, because it i
 
 ## Installation with uv
 The provided `uv.lock` file will not work for anyone outside of JRSRP, as it requires credentials to access their registry. Good luck with that.
+
+The `uv` installation instructions provided by the JRSRP people are reproduced below
+
+```sh
+uv add gdal[numpy]==$(gdal-config --version) \
+    "git+https://gitlab.com/jrsrp/sys/lidar/pynninterp@1.0.1" \
+    "git+https://github.com/ubarsc/pynninterp"
+
+uv add airborne-ls
+```
+
+
+For development, it might be more convenient to install these using `uv pip install`, eg
+
+```sh
+uv add gdal[numpy]==$(gdal-config --version) # make sure your version matches your system
+uv pip install git+https://gitlab.com/jrsrp/sys/lidar/pynninterp@1.0.1
+```
