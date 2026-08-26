@@ -160,9 +160,11 @@ def run_dem_correction(cmdargs):
                 rw_image_methods.writeImage(
                     np.round(res.astype(np.float32), 3),
                     outDemfile, cmdargs, tlx=h["tlx"], tly=h["tly"], binsize=h["pixel_s"],
-                    epsg=cmdargs.epsg, nullVal=nullVal)
+                    epsg=cmdargs.epsg, nullVal=nullVal, driverName=cmdargs.driver)
 
-                demOptions = gdal.DEMProcessingOptions(computeEdges=True)
+                creationoptions = rw_image_methods.creationOptionsByDriver.get(cmdargs.driver, [])
+                demOptions = gdal.DEMProcessingOptions(computeEdges=True,
+                    format=cmdargs.driver, creationOptions=creationoptions)
                 gdal.DEMProcessing(outDemHSfile, outDemfile, "hillshade", options=demOptions)
 
 
