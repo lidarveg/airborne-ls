@@ -472,12 +472,12 @@ def run_tile_products(cmdargs):
             rw_image_methods.writeImage(
                 grTile, outfnames["grdR"], cmdargs, tlx=easting, tly=northing,
                 binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=rtnClassNull,
-                parent_file=infileFull, overviewResampling="NEAREST",
+                parent_file=infileFull, overviewResampling="MODE",
                 driverName=cmdargs.driver)
             rw_image_methods.writeImage(
                 non_grTile, outfnames["NonGrdCodes"], cmdargs,
                 tlx=easting, tly=northing, binsize=cmdargs.psize, epsg=cmdargs.epsg,
-                nullVal=rtnClassNull, parent_file=infileFull, overviewResampling="NEAREST",
+                nullVal=rtnClassNull, parent_file=infileFull, overviewResampling="MODE",
                 driverName=cmdargs.driver)
             rw_image_methods.writeImage(
                 ptDenTile, outfnames["fstDens"], cmdargs,
