@@ -342,10 +342,10 @@ def run_tile_products(cmdargs):
                                 nRows_chm = int(np.ceil(binSize / cmdargs.chm_psize))
                                 nCols_chm = int(np.ceil(binSize / cmdargs.chm_psize))
                                 xst_chm = int(
-                                    int((rowB - 1) * binSize) / cmdargs.chm_psize
+                                    int((colB - 1) * binSize) / cmdargs.chm_psize
                                 )
                                 yst_chm = int(
-                                    int((rowS - colB) * binSize) / cmdargs.chm_psize
+                                    int((rowS - rowB) * binSize) / cmdargs.chm_psize
                                 )
 
                                 maxH_hag = np.full((nRows_chm, nCols_chm), nullVal,
@@ -370,7 +370,7 @@ def run_tile_products(cmdargs):
                                         binSize, nRows_chm, nCols_chm, nullVal)
                                     chmTile[
                                         yst_chm : (yst_chm + nRows_chm),
-                                        xst_chm : (xst_chm + nRows_chm),
+                                        xst_chm : (xst_chm + nCols_chm),
                                     ] = chmVeg
 
                             ##############################
