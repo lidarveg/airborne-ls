@@ -305,21 +305,15 @@ def run_tile_products(cmdargs):
                                 cmdargs.psize)
                             pntIntensity = binChunk["INTENSITY"]
                             # pntClass = binChunk["CLASSIFICATION"]
-                            zArr = np.zeros((nRows, nCols), dtype=np.float32) + nullVal
-                            intensityAtMaxH = (
-                                np.zeros((nRows, nCols), dtype=np.int16) + nullVal
-                            )
+                            zArr = np.full((nRows, nCols), nullVal, dtype=np.float32)
+                            intensityAtMaxH = np.full((nRows, nCols), nullVal, dtype=np.int16)
                             # Everywhere that we actually have data, initialize to zero
                             zArr[row, col] = 0
                             intensityAtMaxH[row, col] = 0
-                            xArr = np.zeros((nRows, nCols), dtype=np.float32) + nullVal
-                            yArr = np.zeros((nRows, nCols), dtype=np.float64) + nullVal
-                            haveGroundReturn = (
-                                np.zeros((nRows, nCols), dtype=np.uint8) + 254
-                            )  # rtnClassNull
-                            nonGroundClasses = (
-                                np.zeros((nRows, nCols), dtype=np.uint8) + 254
-                            )
+                            xArr = np.full((nRows, nCols), nullVal, dtype=np.float32)
+                            yArr = np.full((nRows, nCols), nullVal, dtype=np.float32)
+                            haveGroundReturn = np.full((nRows, nCols), 254, dtype=np.uint8)
+                            nonGroundClasses = np.full((nRows, nCols), 254, dtype=np.uint8)
 
                             gridding_methods.maxH_workflow_layers(
                                 row, col, binChunk["X"], binChunk["Y"],
@@ -354,7 +348,8 @@ def run_tile_products(cmdargs):
                                     int((rowS - colB) * binSize) / cmdargs.chm_psize
                                 )
 
-                                maxH_hag = np.zeros((nRows_chm, nCols_chm)) + nullVal
+                                maxH_hag = np.full((nRows_chm, nCols_chm), nullVal,
+                                                   dtype=np.float32)
                                 gridding_methods.maxH_array(
                                     row_chm, col_chm, heightAboveGround, maxH_hag
                                 )
