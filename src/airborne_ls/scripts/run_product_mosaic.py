@@ -61,7 +61,8 @@ def getCmdargs(inputargs):
     parser.add_argument("--stagecode",
         help="Three-letter stage code to run. If blank, run all stage codes.")
     parser.add_argument("--driver", default='GTiff',
-        help="GDAL driver for image format (default=%(default)s)")
+        help=("GDAL driver for image format (default=%(default)s). If 'GTiff', then " +
+              "use the COG variant for output, otherwise use as given"))
 
     cmdargs = parser.parse_args(inputargs)
 

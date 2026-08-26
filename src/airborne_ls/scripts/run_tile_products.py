@@ -101,6 +101,8 @@ def getCmdargs(inputargs):
         help=("Percentage of points from neighbouring bins to keep for per-bin " +
             "DEM interpolation (default=%(default)s). Smaller values will run faster, " +
             "but too small can leave extra holes in DEM"))
+    parser.add_argument("--driver", default='GTiff',
+        help="GDAL driver for output image format (default=%(default)s)")
 
     cmdargs = parser.parse_args(inputargs)
 
@@ -430,12 +432,12 @@ def run_tile_products(cmdargs):
                 np.round(demTile.astype(np.float32), 3),
                 outfnames["dem"], cmdargs, tlx=easting, tly=northing,
                 binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=nullVal,
-                parent_file=infileFull)
+                parent_file=infileFull, driverName=cmdargs.driver)
             rw_image_methods.writeImage(
                 np.round(csmTile.astype(np.float32), 3),
                 outfnames["csm"], cmdargs, tlx=easting, tly=northing,
                 binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=nullVal,
-                parent_file=infileFull)
+                parent_file=infileFull, driverName=cmdargs.driver)
             #######################
             # interpolating over buildings can be a problem - msk out affected pixels here
             multi = cmdargs.psize / cmdargs.chm_psize
@@ -454,42 +456,44 @@ def run_tile_products(cmdargs):
             rw_image_methods.writeImage(
                 np.round(chmTile.astype(np.float32), 3),
                 outfnames["chm"], cmdargs, tlx=easting, tly=northing,
-                binsize=cmdargs.chm_psize, epsg=cmdargs.epsg,
-                nullVal=nullVal, parent_file=infileFull)
+                binsize=cmdargs.chm_psize, epsg=cmdargs.epsg, nullVal=nullVal,
+                parent_file=infileFull, driverName=cmdargs.driver)
             #########################
             rw_image_methods.writeImage(
                 np.round(maxhTile, 3),
                 outfnames["maxH"], cmdargs, tlx=easting, tly=northing,
                 binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=nullVal,
-                parent_file=infileFull)
+                parent_file=infileFull, driverName=cmdargs.driver)
             rw_image_methods.writeImage(
                 np.round(intensTile, 4),
                 outfnames["intens"], cmdargs, tlx=easting, tly=northing,
                 binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=nullVal,
-                parent_file=infileFull)
+                parent_file=infileFull, driverName=cmdargs.driver)
             rw_image_methods.writeImage(
                 grTile, outfnames["grdR"], cmdargs, tlx=easting, tly=northing,
                 binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=rtnClassNull,
-                parent_file=infileFull, overviewResampling="NEAREST")
+                parent_file=infileFull, overviewResampling="NEAREST",
+                driverName=cmdargs.driver)
             rw_image_methods.writeImage(
                 non_grTile, outfnames["NonGrdCodes"], cmdargs,
                 tlx=easting, tly=northing, binsize=cmdargs.psize, epsg=cmdargs.epsg,
-                nullVal=rtnClassNull, parent_file=infileFull, overviewResampling="NEAREST")
+                nullVal=rtnClassNull, parent_file=infileFull, overviewResampling="NEAREST",
+                driverName=cmdargs.driver)
             rw_image_methods.writeImage(
                 ptDenTile, outfnames["fstDens"], cmdargs,
-                tlx=easting, tly=northing, binsize=cmdargs.psize,
-                epsg=cmdargs.epsg, nullVal=0, parent_file=infileFull)
+                tlx=easting, tly=northing, binsize=cmdargs.psize, epsg=cmdargs.epsg,
+                nullVal=0, parent_file=infileFull, driverName=cmdargs.driver)
             for idx, pp in enumerate(percentiles):
                 layer = pctTile[idx, :, :]
                 productName = f"percentile{pp}"
                 rw_image_methods.writeImage(
                     layer, outfnames[productName], cmdargs, tlx=easting, tly=northing,
                     binsize=cmdargs.ptile_s, epsg=cmdargs.epsg, nullVal=nullVal,
-                    parent_file=infileFull)
+                    parent_file=infileFull, driverName=cmdargs.driver)
             rw_image_methods.writeImage(
                 np.rint(fpcTile).astype(np.uint8), outfnames["fpc"], cmdargs,
                 tlx=easting, tly=northing, binsize=cmdargs.fpc_psize, epsg=cmdargs.epsg,
-                nullVal=rtnClassNull, parent_file=infileFull)
+                nullVal=rtnClassNull, parent_file=infileFull, driverName=cmdargs.driver)
 
             # Apply colour tables
             fpcClrTbl = fpc_method.makeFPCcolorTable()
