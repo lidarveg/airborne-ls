@@ -17,7 +17,7 @@ from pathlib import Path
 
 from osgeo import gdal
 
-from airborne_ls import filenaming_methods, qvf
+from airborne_ls import filenaming_methods, qvf, rw_image_methods
 
 
 gdal.UseExceptions()
@@ -147,11 +147,9 @@ def runMerge(cmdargs):
         logger.debug(f"Missing tiles in {outFile} include {missing_tiles}")
 
         driverName = cmdargs.driver
-        # If not GTiff, we need to do something about creation options
         if driverName == "GTiff":
             driverName = "COG"
-            creationOptions = ["COMPRESS=DEFLATE", "BLOCKSIZE=256",
-                               "RESAMPLING=BILINEAR", "BIGTIFF=IF_SAFER"]
+        creationOptions = rw_image_methods.creationOptionsByDriver.get(driverName, [])
         translateOptions = gdal.TranslateOptions(format=driverName,
             creationOptions=creationOptions)
         gdal.Translate(outFile, vrtFilename, options=translateOptions)
