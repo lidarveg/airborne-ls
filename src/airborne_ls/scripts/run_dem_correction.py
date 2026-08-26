@@ -159,7 +159,7 @@ def run_dem_correction(cmdargs):
 
                 rw_image_methods.writeImage(
                     np.round(res.astype(np.float32), 3),
-                    outDemfile, cmdargs, tlx=h["tlx"], tly=h["tly"], binsize=h["pixel_s"],
+                    outDemfile, tlx=h["tlx"], tly=h["tly"], binsize=h["pixel_s"],
                     epsg=cmdargs.epsg, nullVal=nullVal, driverName=cmdargs.driver)
 
                 creationoptions = rw_image_methods.creationOptionsByDriver.get(cmdargs.driver, [])

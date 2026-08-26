@@ -7,8 +7,6 @@ numpy record array.
 import numpy as np
 from osgeo import gdal, osr, gdal_array
 
-# from airborne-ls import
-
 
 gdal.UseExceptions()
 
@@ -25,7 +23,7 @@ creationOptionsByDriver = {
 ###################################################################################################
 
 
-def writeImage(image, outfile, cmdargs, driverName="GTiff", tlx=0.0, tly=0.0,
+def writeImage(image, outfile, driverName="GTiff", tlx=0.0, tly=0.0,
                binsize=0.0, epsg=None, nullVal=None, parent_file=None,
                overviewResampling="BILINEAR", overviewLevels=[4, 8, 16, 32, 64],
                creationoptions=None):
