@@ -11,7 +11,7 @@ coding of method:
 """
 
 import numpy as np
-from numba import jit
+from numba import njit
 
 from airborne_ls import gridding_methods
 
@@ -49,7 +49,7 @@ def check_pts_pulses(las_data):
     return flightLines
 
 
-@jit
+@njit
 def fpcGridding(row, col, hgt, wgt, fpc, canopyThreshold):
     """
     Calculate two bands:

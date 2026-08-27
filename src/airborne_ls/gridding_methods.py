@@ -6,7 +6,7 @@ This module stores a series of functions for converting point clouds into gridde
 
 import numpy as np
 import pynninterp
-from numba import jit
+from numba import njit
 from scipy import ndimage
 
 from airborne_ls import const
@@ -97,7 +97,7 @@ def get_grid(xr, xst, yst, psize):
 # ----------------------------------------------------------------------------------------------------
 
 
-@jit
+@njit
 def runPitInfill(ny, nx, ksize, med):
     """
     Fill pits in the DEM using a neighbourhood-based approach.
@@ -139,7 +139,7 @@ def circleLocs(radius):
 
 
 ###################################################################################################
-@jit
+@njit
 def maxH_workflow_layers(row, col, x, y, z, intensity, classi,
         xArr, yArr, zArr, intensityAtMaxH, nonGroundClasses, haveGroundReturn):
     """
@@ -176,7 +176,7 @@ def maxH_workflow_layers(row, col, x, y, z, intensity, classi,
             nonGroundClasses[r, c] = np.uint(classi[i])
 
 
-@jit
+@njit
 def fstR_density(row, col, x, y, density):
     """
     Increment the density count for each (row, col) grid cell based on the first return data.
@@ -307,7 +307,7 @@ def maxH_xyzLocs(x, y, z, psize, nullV=-999.0):
     )
 
 
-@jit
+@njit
 def maxH_array(row, col, z, maxH_hag):
     """
     Update a 2D grid with the maximum height values from a LiDAR point cloud.
@@ -328,7 +328,7 @@ def maxH_array(row, col, z, maxH_hag):
 
 
 ###################################################################################################
-@jit
+@njit
 def count_fstR(row, col, density):
     """
     Increment the density count for each (row, col) grid cell.
