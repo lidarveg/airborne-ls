@@ -216,7 +216,8 @@ def run_tile_products(cmdargs):
             tileChmShape = (tileSizeChmPix, tileSizeChmPix)
             tileSizeFpcPix = int(cmdargs.tile_s / cmdargs.fpc_psize)
             tileFpcShape = (tileSizeFpcPix, tileSizeFpcPix)
-            tilePctShape = (len(percentiles), tileSizePix, tileSizePix)
+            tileSizePctPix = int(cmdargs.tile_s / cmdargs.ptile_s)
+            tilePctShape = (len(percentiles), tileSizePctPix, tileSizePctPix)
 
             demTile = np.full(tileShape, nullVal)
             csmTile = np.full(tileShape, nullVal)
