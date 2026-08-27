@@ -219,17 +219,17 @@ def run_tile_products(cmdargs):
             tileSizePctPix = int(cmdargs.tile_s / cmdargs.ptile_s)
             tilePctShape = (len(percentiles), tileSizePctPix, tileSizePctPix)
 
-            demTile = np.full(tileShape, nullVal)
-            csmTile = np.full(tileShape, nullVal)
-            chmTile = np.zeros(tileChmShape)
-            maxhTile = np.full(tileShape, nullVal)
-            intensTile = np.full(tileShape, nullVal)
+            demTile = np.full(tileShape, nullVal, dtype=np.float32)
+            csmTile = np.full(tileShape, nullVal, dtype=np.float32)
+            chmTile = np.zeros(tileChmShape, dtype=np.float32)
+            maxhTile = np.full(tileShape, nullVal, dtype=np.float32)
+            intensTile = np.full(tileShape, nullVal, dtype=np.float32)
             ptDenTile = np.zeros(tileShape, dtype=np.uint16)
             # rtnClassNull # testing addition of new code to infill holes
             grTile = np.full(tileShape, 254, dtype=np.uint8)
             non_grTile = np.full(tileShape, 254, dtype=np.uint8)
-            pctTile = np.full(tilePctShape, nullVal)
-            fpcTile = np.full(tileFpcShape, rtnClassNull)
+            pctTile = np.full(tilePctShape, nullVal, dtype=np.float32)
+            fpcTile = np.full(tileFpcShape, rtnClassNull, dtype=np.float32)
 
             # read in data
             # bData stores the data in chunks/bins for rapid access
@@ -425,12 +425,12 @@ def run_tile_products(cmdargs):
             del bData
 
             rw_image_methods.writeImage(
-                np.round(demTile.astype(np.float32), 3),
+                np.round(demTile, 3),
                 outfnames["dem"], tlx=easting, tly=northing,
                 binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=nullVal,
                 parent_file=infileFull, driverName=cmdargs.driver)
             rw_image_methods.writeImage(
-                np.round(csmTile.astype(np.float32), 3),
+                np.round(csmTile, 3),
                 outfnames["csm"], tlx=easting, tly=northing,
                 binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=nullVal,
                 parent_file=infileFull, driverName=cmdargs.driver)
@@ -450,7 +450,7 @@ def run_tile_products(cmdargs):
             )  # median filter ignoring zeros
             chmTile[chmTile < 0.5] = nullVal
             rw_image_methods.writeImage(
-                np.round(chmTile.astype(np.float32), 3),
+                np.round(chmTile, 3),
                 outfnames["chm"], tlx=easting, tly=northing,
                 binsize=cmdargs.chm_psize, epsg=cmdargs.epsg, nullVal=nullVal,
                 parent_file=infileFull, driverName=cmdargs.driver)
@@ -483,7 +483,7 @@ def run_tile_products(cmdargs):
                 layer = pctTile[idx, :, :]
                 productName = f"percentile{pp}"
                 rw_image_methods.writeImage(
-                    layer, outfnames[productName], tlx=easting, tly=northing,
+                    np.round(layer, 3), outfnames[productName], tlx=easting, tly=northing,
                     binsize=cmdargs.ptile_s, epsg=cmdargs.epsg, nullVal=nullVal,
                     parent_file=infileFull, driverName=cmdargs.driver)
             rw_image_methods.writeImage(
