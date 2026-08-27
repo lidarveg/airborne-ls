@@ -286,7 +286,7 @@ def run_tile_products(cmdargs):
                             csm = csm - dem
                             csm[dem == nullVal] = nullVal
                             csmTile[binSlice] = csm
-                            csmTile[csmTile < -5] = np.nan
+                            csmTile[csmTile < -5] = nullVal
                             #######################################################################
                             # interp to irregular grid
                             nonGround = (binChunk["CLASSIFICATION"] != const.PTCLASS_GROUND)
