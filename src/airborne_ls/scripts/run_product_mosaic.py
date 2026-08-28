@@ -151,8 +151,8 @@ def runMerge(cmdargs):
         if driverName == "GTiff":
             driverName = "COG"
         creationOptions = rw_image_methods.creationOptionsByDriver.get(driverName, [])
-        if qvf.getstagecode(outFile) in ('bb3', 'bb4', 'bbh'):
-            # We do NOT want BILINEAR overview resampling for these two stages
+        if qvf.getstagecode(outFile) in ('bb3', 'bb4'):
+            # We do NOT want BILINEAR overview resampling for these stages
             BILINEAR_RESAMPLING = "RESAMPLING=BILINEAR"
             if BILINEAR_RESAMPLING in creationOptions:
                 creationOptions = [co for co in creationOptions if co != BILINEAR_RESAMPLING]
