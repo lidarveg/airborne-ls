@@ -177,6 +177,32 @@ def maxH_workflow_layers(row, col, x, y, z, intensity, classi,
 
 
 @njit
+def makeClassCounts(row, col, x, y, z, pntClass, classCounts):
+    """
+    Make a per-pixel counts of point classification values
+
+    Assumes that classCounts has been intialized to all zeros, and updates
+    it in-place.
+
+    Parameters:
+      row, col: Arrays of the pixel row and column values for each point
+                return (numPoints)
+      x, y, z: Arrays of the coordinates of each point return (numPoints)
+      pntClass: Array of classification value for each point return (numPoints)
+      classCounts: Array of per-pixel counts for each classification value,
+                   shape (nClass, nRows, nCols).
+    """
+    classUpperBound = classCounts.shape[0]
+
+    numPts = len(row)
+    for i in range(numPts):
+        (r, c) = (row[i], col[i])
+        cls = pntClass[i]
+        if cls < classUpperBound:
+            classCounts[cls, r, c] += 1
+
+
+@njit
 def fstR_density(row, col, x, y, density):
     """
     Increment the density count for each (row, col) grid cell based on the first return data.
