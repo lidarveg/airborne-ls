@@ -141,7 +141,7 @@ def circleLocs(radius):
 ###################################################################################################
 @njit
 def maxH_workflow_layers(row, col, x, y, z, intensity, classi,
-        xArr, yArr, zArr, intensityAtMaxH, nonGroundClasses, haveGroundReturn):
+        xArr, yArr, zArr, intensityAtMaxH, haveGroundReturn):
     """
     Compute the maximum height grid and associated x, y locations from a LiDAR point cloud as
     2D arrays.
@@ -155,7 +155,6 @@ def maxH_workflow_layers(row, col, x, y, z, intensity, classi,
                           grid cell.
         intensityAtMaxH: 2D array to store intensity values at the maximum height for each
                          grid cell.
-        nonGroundClasses: 2D array to store non-ground classification values for each grid cell.
         haveGroundReturn: 2D array to indicate whether a ground return exists for each grid cell.
 
     Returns:
@@ -172,8 +171,6 @@ def maxH_workflow_layers(row, col, x, y, z, intensity, classi,
             intensityAtMaxH[r, c] = intensity[i]
         if classi[i] == const.PTCLASS_GROUND:
             haveGroundReturn[r, c] = 1
-        else:
-            nonGroundClasses[r, c] = np.uint(classi[i])
 
 
 @njit
