@@ -141,7 +141,7 @@ def circleLocs(radius):
 ###################################################################################################
 @njit
 def maxH_workflow_layers(row, col, x, y, z, intensity, classi,
-        xArr, yArr, zArr, intensityAtMaxH, nonGroundClasses, haveGroundReturn):
+        xArr, yArr, zArr, intensityAtMaxH, haveGroundReturn):
     """
     Compute the maximum height grid and associated x, y locations from a LiDAR point cloud as
     2D arrays.
@@ -155,7 +155,6 @@ def maxH_workflow_layers(row, col, x, y, z, intensity, classi,
                           grid cell.
         intensityAtMaxH: 2D array to store intensity values at the maximum height for each
                          grid cell.
-        nonGroundClasses: 2D array to store non-ground classification values for each grid cell.
         haveGroundReturn: 2D array to indicate whether a ground return exists for each grid cell.
 
     Returns:
@@ -172,8 +171,32 @@ def maxH_workflow_layers(row, col, x, y, z, intensity, classi,
             intensityAtMaxH[r, c] = intensity[i]
         if classi[i] == const.PTCLASS_GROUND:
             haveGroundReturn[r, c] = 1
-        else:
-            nonGroundClasses[r, c] = np.uint(classi[i])
+
+
+@njit
+def makeClassCounts(row, col, x, y, z, pntClass, classCounts):
+    """
+    Make a per-pixel counts of point classification values
+
+    Assumes that classCounts has been intialized to all zeros, and updates
+    it in-place.
+
+    Parameters:
+      row, col: Arrays of the pixel row and column values for each point
+                return (numPoints)
+      x, y, z: Arrays of the coordinates of each point return (numPoints)
+      pntClass: Array of classification value for each point return (numPoints)
+      classCounts: Array of per-pixel counts for each classification value,
+                   shape (nClass, nRows, nCols).
+    """
+    classUpperBound = classCounts.shape[0]
+
+    numPts = len(row)
+    for i in range(numPts):
+        (r, c) = (row[i], col[i])
+        cls = pntClass[i]
+        if cls < classUpperBound:
+            classCounts[cls, r, c] += 1
 
 
 @njit

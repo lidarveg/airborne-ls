@@ -52,9 +52,10 @@ logging.basicConfig(
 
 
 # Default constants
-las_st = "ul"  # Requires filename to use upper-left naming convention
 percentiles = [1, 5, 25, 50, 75, 95, 99]
 rtnClassNull = 255
+# We will count return classes up to this class
+CLASSCOUNTS_MAXCLASS = const.PTCLASS_TEMPORALEXCLUSION
 
 
 def getCmdargs(inputargs):
@@ -271,6 +272,18 @@ def run_tile_products(cmdargs):
                                 cmdargs.psize, nullVal=nullVal)
                             demTile[binSlice] = dem
 
+                        # Get pixel coords of each point return, within the array for the bin
+                        (row, col) = gridding_methods.xyToRowCol(
+                            binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
+                            cmdargs.psize)
+
+                        # Count return classes per-pixel
+                        classCountsShape = (CLASSCOUNTS_MAXCLASS + 1, nRows, nCols)
+                        classCounts = np.zeros(classCountsShape, dtype=np.uint16)
+                        gridding_methods.makeClassCounts(row, col, binChunk["X"],
+                            binChunk["Y"], binChunk["Z"], binChunk["CLASSIFICATION"],
+                            classCounts)
+
                         #######################################################################
                         # run csm
                         xValsA, yValsA, zValsA = gridding_methods.maxH_xyzLocs(
@@ -286,9 +299,6 @@ def run_tile_products(cmdargs):
                         #######################################################################
                         # interp to irregular grid
                         nonGround = (binChunk["CLASSIFICATION"] != const.PTCLASS_GROUND)
-                        # , groundMask = (
-                        #     binChunk["CLASSIFICATION"] != 2,
-                        #     binChunk["CLASSIFICATION"] == 2,)
 
                         heightAboveGround = (
                             gridding_methods.createHeightAboveGround(nonGround,
@@ -296,9 +306,6 @@ def run_tile_products(cmdargs):
                                 chunk["X"][grdhits], chunk["Y"][grdhits], chunk["Z"][grdhits])
                         )
 
-                        (row, col) = gridding_methods.xyToRowCol(
-                            binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
-                            cmdargs.psize)
                         pntIntensity = binChunk["INTENSITY"]
                         # pntClass = binChunk["CLASSIFICATION"]
                         zArr = np.full((nRows, nCols), nullVal, dtype=np.float32)
@@ -313,10 +320,14 @@ def run_tile_products(cmdargs):
 
                         gridding_methods.maxH_workflow_layers(
                             row, col, binChunk["X"], binChunk["Y"],
-                            heightAboveGround, pntIntensity,
-                            binChunk["CLASSIFICATION"],
-                            xArr, yArr, zArr, intensityAtMaxH,
-                            nonGroundClasses, haveGroundReturn)
+                            heightAboveGround, pntIntensity, binChunk["CLASSIFICATION"],
+                            xArr, yArr, zArr, intensityAtMaxH, haveGroundReturn)
+
+                        # nonGroundClasses is most common non-ground class in each pixel
+                        classCountsNonGround = np.copy(classCounts)
+                        classCountsNonGround[const.PTCLASS_GROUND] = 0
+                        nonGroundClasses = classCountsNonGround.argmax(axis=0)
+                        del classCountsNonGround
 
                         maxhTile[binSlice] = zArr
                         intensTile[binSlice] = intensityAtMaxH
@@ -641,7 +652,7 @@ def makeNonGroundClrTbl():
     Returns:
       clrTblArr: Array of RGB values
     """
-    clrTblArr = np.full((256, 3), 255, dtype=np.uint8)
+    clrTblArr = np.full((256, 3), 0, dtype=np.uint8)
     clrTblArr[0] = (254, 254, 254)  # never classified:
     clrTblArr[1] = (200, 200, 200)  # unclassified: light gray
     clrTblArr[2] = (0, 0, 0)        # ground classification
