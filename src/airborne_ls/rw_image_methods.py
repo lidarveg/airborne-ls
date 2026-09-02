@@ -108,7 +108,6 @@ def imgH(img):
     xdim = data.RasterXSize
     ydim = data.RasterYSize
     pixel_s = info[1]
-    # proj = data.GetProjection()
     h = {
         "xdim": xdim,
         "ydim": ydim,
@@ -116,6 +115,7 @@ def imgH(img):
         "pixel_s": pixel_s,
         "tlx": xst,
         "tly": yst,
+        "sr": data.GetSpatialRef()
     }
 
     return h
