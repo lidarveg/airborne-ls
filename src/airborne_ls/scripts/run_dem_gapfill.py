@@ -10,6 +10,7 @@ be water bodies noticeably larger than the bin size, another can be small areas 
 bin edges where the neighbouring bin was lacking in sufficient ground returns.
 
 """
+import sys
 import os
 import argparse
 import glob
@@ -27,7 +28,8 @@ def getCmdargs():
     Get command line arguments
     """
     p = argparse.ArgumentParser(description="""
-        Interpolate to fill in gaps (i.e. regions filled with null values) in DEM tiles
+        Interpolate to fill in gaps (i.e. regions filled with null values) in DEM tiles.
+        Outputs files are same names as input DEM files, with modified 'l' field.
     """)
     p.add_argument("--tilesize", type=int, default=1000,
         help=("Size of tiles (metres). Used to identify surrounding tile filenames " +
@@ -56,6 +58,11 @@ def getCmdargs():
         help=("Name of GDAL driver. Used to identify file names as well as to format " +
               "the output (default=%(default)s)"))
     cmdargs = p.parse_args()
+
+    if cmdargs.demfile is not None and cmdargs.indir is not None:
+        print("Use either --demfile or --indir, but not both", file=sys.stderr)
+        sys.exit(1)
+
     return cmdargs
 
 
@@ -66,7 +73,7 @@ def main():
     cmdargs = getCmdargs()
     demfileList = getDemImageFiles(cmdargs)
 
-    filledLabel = "gapfilled"
+    filledLabel = "gapfilleddem"
     hillshadeProduct = "demHS"
     hillshadeStage = filenaming_methods.stageByProductName[hillshadeProduct]
 
