@@ -37,7 +37,7 @@ def getCmdargs():
     p.add_argument("--skipexisting", default=False, action="store_true",
         help=("Skip existing gap-filled DEM tiles. Default will re-compute any " +
               "output files which already exist"))
-    p.add_argument("--tilemargin", type=int, default=100,
+    p.add_argument("--tilemargin", type=int, default=200,
         help=("Margin (in pixels) of data to bring in from surrounding tiles " +
               "(default=%(default)s)"))
     p.add_argument("--clumpborder", type=int, default=10,
@@ -85,19 +85,20 @@ def main():
         else:
             inHdr = rw_image_methods.imgH(demfile)
             epsgNum = int(inHdr['sr'].GetAuthorityCode())
-            (dem, tileSlice, nullVal) = readWithMargin(demfile, cmdargs.tilemargin)
+            (dem, tileSlice, nullVal) = readWithMargin(demfile, cmdargs)
             dem = fillGaps(dem, nullVal, cmdargs.clumpborder)
-            # Strip off the margins, round, and back to float32
-            dem = numpy.round(dem[tileSlice], 3).astype(numpy.float32)
+            # Strip off the margins, back to float32, and round to 3 places
+            dem = dem[tileSlice]
+            dem = dem.astype(numpy.float32)
+            dem = numpy.round(dem, 3)
 
-            outDemHSfile = qvf.setstagecode(demfile, hillshadeStage)
-            outDemHSfile = qvf.setoptionfield(outDemHSfile, 'l', hillshadeProduct)
-
-            rw_image_methods.writeImage(dem, demGapFilledFile, driver=cmdargs.driver,
+            rw_image_methods.writeImage(dem, demGapFilledFile, driverName=cmdargs.driver,
                 tlx=inHdr['tlx'], tly=inHdr['tly'], binsize=inHdr['pixel_s'],
                 epsg=epsgNum, nullVal=nullVal)
 
             # Re-create the hillshade image
+            outDemHSfile = qvf.setstagecode(demfile, hillshadeStage)
+            outDemHSfile = qvf.setoptionfield(outDemHSfile, 'l', hillshadeProduct)
             creationoptions = rw_image_methods.creationOptionsByDriver.get(cmdargs.driver, [])
             demOptions = gdal.DEMProcessingOptions(computeEdges=True,
                 format=cmdargs.driver, creationOptions=creationoptions)
@@ -223,6 +224,90 @@ def getDemImageFiles(cmdargs):
     return demfileList
 
 
+def readWithMargin(demfile, cmdargs):
+    """
+    Read the DEM data for the given tile, augmented with a margin of data from
+    surrounding tiles, where available.
+    """
+    tilesize = cmdargs.tilesize
+    margin = cmdargs.tilemargin
+    nbrOffset = {
+        'N': (0, tilesize), 'E': (tilesize, 0),
+        'S': (0, -tilesize), 'W': (-tilesize, 0),
+        'NE': (tilesize, tilesize), 'SE': (tilesize, -tilesize),
+        'SW': (-tilesize, -tilesize), 'NW': (-tilesize, tilesize)
+    }
+
+    # Find the existing neighbour files for each direction
+    nbrTile = {}
+    for key in nbrOffset:
+        (xOffset, yOffset) = nbrOffset[key]
+        filename = neighbourTileFilename(demfile, xOffset, yOffset)
+        if os.path.exists(filename):
+            nbrTile[key] = filename
+    # Only keep diagonal neighbours if both its adjacent direct neighbours also exist
+    for key in ['NE', 'SE', 'SW', 'NW']:
+        if key in nbrTile and (key[0] not in nbrTile or key[1] not in nbrTile):
+            # Missing at least one direct neighbour, so remove this diagonal
+            nbrTile.pop(key)
+
+    # Header of central tile
+    tileInfo = rw_image_methods.imgH(demfile)
+
+    # The tile shape, assumed to be the same for all tiles
+    (nRowsPerTile, nColsPerTile) = (tileInfo['ydim'], tileInfo['xdim'])
+    # The shape of the output array, and the position of the central tile within that array
+    (nRows, nCols) = (nRowsPerTile, nColsPerTile)
+    (ctrTop, ctrBottom, ctrLeft, ctrRight) = (0, nRows, 0, nCols)
+    if 'N' in nbrTile:
+        nRows += margin
+        (ctrTop, ctrBottom) = (ctrTop + margin, ctrBottom + margin)
+    if 'S' in nbrTile:
+        nRows += margin
+    if 'E' in nbrTile:
+        nCols += margin
+    if 'W' in nbrTile:
+        nCols += margin
+        (ctrLeft, ctrRight) = (ctrLeft + margin, ctrRight + margin)
+
+    # For each possible neighbour, the row/cols to read, and where to place it in
+    # the output array. Each value is a tuple (fpos, apos).
+    # The fpos tuple is for reading from the file (xoff, yoff, win_xsize, win_ysize)
+    # The apos tuple is location within the output array (startRow, endRow, startCol, endCol)
+    nbrPos = {
+        'N': ((0, (nRowsPerTile - margin), nColsPerTile, margin), (0, margin, ctrLeft, ctrRight)),
+        'E': ((0, 0, margin, nRowsPerTile), (ctrTop, ctrBottom, ctrRight, nCols)),
+        'S': ((0, 0, nColsPerTile, margin), (ctrBottom, nRows, ctrLeft, ctrRight)),
+        'W': ((nColsPerTile - margin, 0, margin, nRowsPerTile), (ctrTop, ctrBottom, 0, ctrLeft)),
+        'NE': ((0, nRowsPerTile - margin, margin, margin), (0, margin, ctrRight, nCols)),
+        'SE': ((0, 0, margin, margin), (ctrBottom, nRows, ctrRight, nCols)),
+        'SW': ((nColsPerTile - margin, 0, margin, margin), (ctrBottom, nRows, 0, margin)),
+        'NW': ((nColsPerTile - margin, nRowsPerTile - margin, margin, margin),
+               (0, ctrTop, 0, ctrLeft))
+    }
+
+    # Read in the central tile
+    ds = gdal.Open(demfile)
+    band = ds.GetRasterBand(1)
+    nullVal = band.GetNoDataValue()
+    dem = numpy.full((nRows, nCols), nullVal, dtype=numpy.float32)
+    dem[ctrTop:ctrBottom, ctrLeft:ctrRight] = band.ReadAsArray().astype(numpy.float32)
+    del band, ds
+
+    # Now read in all margins
+    for key in nbrTile:
+        (fpos, apos) = nbrPos[key]
+        nbrDs = gdal.Open(nbrTile[key])
+        nbrBand = nbrDs.GetRasterBand(1)
+        arr = nbrBand.ReadAsArray(fpos[0], fpos[1], fpos[2], fpos[3])
+        dem[apos[0]:apos[1], apos[2]:apos[3]] = arr
+
+    # A slice object to select the central tile from the augmented array
+    tileSlice = (slice(ctrTop, ctrBottom), slice(ctrLeft, ctrRight))
+
+    return (dem, tileSlice, nullVal)
+
+
 def neighbourTileFilename(tilefile, xOffset, yOffset):
     """
     Given the file name of a single tile of data, return the file name for
@@ -245,7 +330,7 @@ def neighbourTileFilename(tilefile, xOffset, yOffset):
     newWhere = filenaming_methods.neighbourTileWhere(where, xOffset, yOffset)
     nbrfileFull = qvf.setwhere(tilefile, newWhere)
 
-    # We probably also need to change the where field in the directory name
+    # We also need to change the where field in the directory name
     (nbrdir, nbrfile) = os.path.split(nbrfileFull)
     if qvf.isQvf(nbrdir):
         if where == qvf.getwhere(nbrdir):
