@@ -86,23 +86,25 @@ def main():
             inHdr = rw_image_methods.imgH(demfile)
             epsgNum = int(inHdr['sr'].GetAuthorityCode())
             (dem, tileSlice, nullVal) = readWithMargin(demfile, cmdargs)
-            dem = fillGaps(dem, nullVal, cmdargs.clumpborder)
+            demFilled = fillGaps(dem, nullVal, cmdargs.clumpborder)
             # Strip off the margins, back to float32, and round to 3 places
-            dem = dem[tileSlice]
-            dem = dem.astype(numpy.float32)
-            dem = numpy.round(dem, 3)
+            demFilled = demFilled[tileSlice]
+            demFilled = demFilled.astype(numpy.float32)
+            demFilled = numpy.round(demFilled, 3)
+            tileChanged = (demFilled != dem[tileSlice]).any()
 
-            rw_image_methods.writeImage(dem, demGapFilledFile, driverName=cmdargs.driver,
-                tlx=inHdr['tlx'], tly=inHdr['tly'], binsize=inHdr['pixel_s'],
-                epsg=epsgNum, nullVal=nullVal)
+            if tileChanged:
+                rw_image_methods.writeImage(demFilled, demGapFilledFile, driverName=cmdargs.driver,
+                    tlx=inHdr['tlx'], tly=inHdr['tly'], binsize=inHdr['pixel_s'],
+                    epsg=epsgNum, nullVal=nullVal)
 
-            # Re-create the hillshade image
-            outDemHSfile = qvf.setstagecode(demfile, hillshadeStage)
-            outDemHSfile = qvf.setoptionfield(outDemHSfile, 'l', hillshadeProduct)
-            creationoptions = rw_image_methods.creationOptionsByDriver.get(cmdargs.driver, [])
-            demOptions = gdal.DEMProcessingOptions(computeEdges=True,
-                format=cmdargs.driver, creationOptions=creationoptions)
-            gdal.DEMProcessing(outDemHSfile, demGapFilledFile, "hillshade", options=demOptions)
+                # Re-create the hillshade image
+                outDemHSfile = qvf.setstagecode(demfile, hillshadeStage)
+                outDemHSfile = qvf.setoptionfield(outDemHSfile, 'l', hillshadeProduct)
+                creationoptions = rw_image_methods.creationOptionsByDriver.get(cmdargs.driver, [])
+                demOptions = gdal.DEMProcessingOptions(computeEdges=True,
+                    format=cmdargs.driver, creationOptions=creationoptions)
+                gdal.DEMProcessing(outDemHSfile, demGapFilledFile, "hillshade", options=demOptions)
 
 
 def fillGaps(dem, nullVal, border):
