@@ -121,7 +121,7 @@ def runMerge(cmdargs):
 
             # For the "dem" product, check for infilled version first
             if productName == "dem":
-                productFile = qvf.setoptionfield(productFile, 'l', "demInfilled")
+                productFile = qvf.setoptionfield(productFile, 'l', "gapfilleddem")
                 if not os.path.exists(productFile):
                     productFile = qvf.setoptionfield(productFile, 'l', "dem")
 
