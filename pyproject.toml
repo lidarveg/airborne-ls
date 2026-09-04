@@ -7,7 +7,7 @@ packages = ["src/airborne_ls"]
 
 [project]
 name = "airborne-ls"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Calculate terrain and vegetation products from airborne laser scanner data"
 readme = "README.md"
 requires-python = ">=3.12"
@@ -33,3 +33,6 @@ run_dem_gapfill = "airborne_ls.scripts.run_dem_gapfill:main"
 
 [[tool.uv.index]]
 url = "https://gitlab.com/api/v4/projects/64206106/packages/pypi/simple"
+
+[tool.hatch.version]
+path = "src/airborne_ls/__init__.py"
