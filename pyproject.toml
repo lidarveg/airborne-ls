@@ -10,18 +10,18 @@ name = "airborne-ls"
 dynamic = ["version"]
 description = "Calculate terrain and vegetation products from airborne laser scanner data"
 readme = "README.md"
-requires-python = ">=3.12"
+
 dependencies = [
-    "gdal[numpy]==3.10.3",
-    "laspy[lazrs]>=2.7.0",
-    "numba>=0.66.0",
-    "pre-commit>=4.6.1",
-    "scipy>=1.18.0",
+    "gdal[numpy]",
+    "laspy[lazrs]",
+    "numba",
+    "pre-commit",
+    "scipy>=1.10.0",
 ]
 
 [dependency-groups]
 dev = [
-    "pre-commit>=4.6.1",
+    "pre-commit",
 ]
 
 [project.scripts]
