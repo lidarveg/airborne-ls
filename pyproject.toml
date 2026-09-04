@@ -10,7 +10,7 @@ name = "airborne-ls"
 dynamic = ["version"]
 description = "Calculate terrain and vegetation products from airborne laser scanner data"
 readme = "README.md"
-
+requires-python = ">=3.9"
 dependencies = [
     "gdal[numpy]",
     "laspy[lazrs]",
