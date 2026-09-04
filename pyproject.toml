@@ -24,8 +24,8 @@ run_tile_products = "airborne_ls.scripts.run_tile_products:main"
 run_product_mosaic = "airborne_ls.scripts.run_product_mosaic:main"
 run_dem_gapfill = "airborne_ls.scripts.run_dem_gapfill:main"
 
-#[[tool.uv.index]]
-#url = "https://gitlab.com/api/v4/projects/64206106/packages/pypi/simple"
+[[tool.uv.index]]
+url = "https://gitlab.com/api/v4/projects/64206106/packages/pypi/simple"
 
 [tool.hatch.version]
 path = "src/airborne_ls/__init__.py"
