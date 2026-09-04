@@ -15,13 +15,7 @@ dependencies = [
     "gdal[numpy]",
     "laspy[lazrs]",
     "numba",
-    "pre-commit",
     "scipy>=1.10.0",
-]
-
-[dependency-groups]
-dev = [
-    "pre-commit",
 ]
 
 [project.scripts]
