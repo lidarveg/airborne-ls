@@ -22,7 +22,7 @@ conda activate airborne-ls
 pip install git+https://github.com/lidarveg/airborne-ls
 ```
 
-The pip command install both `pynninterp` and `airborne-ls`, but uses the other packages from those
+The pip command installs both `pynninterp` and `airborne-ls`, but uses the other packages from those
 installed by conda.
 
 ## Installation with pip
