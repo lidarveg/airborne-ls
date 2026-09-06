@@ -75,6 +75,9 @@ def getCmdargs(inputargs):
         help="Directory for newly named and indexed LAS/LAZ files.")
     parser.add_argument("--laz_flist", required=True,
         help="Text file containing LAS/LAZ files to be processed; one file per row.")
+    parser.add_argument("--minlasversion", default="1.4",
+        help=("Minimum LAS format version for output files (default=%(default)s). " +
+              "Newer format input files will preserve their newer version"))
 
     # Tile dimensions
     parser.add_argument("--tile_s", required=True, type=float,
@@ -159,6 +162,12 @@ def getCmdargs(inputargs):
         msg = f"Output tile size {cmdargs.out_tile_s} not divisible by bin size {cmdargs.binSize}"
         raise ValueError(msg)
 
+    lasVersNum = tuple([int(i) for i in cmdargs.minlasversion.split('.')])
+    if len(lasVersNum) > 2:
+        msg = f"LAS version {cmdargs.lasversion} has too many components ({len(lasVersNum)})"
+        raise ValueError(msg)
+    cmdargs.minlasversion = laspy.header.Version(*lasVersNum)
+
     return cmdargs
 
 
@@ -194,9 +203,9 @@ def run_las_standardisation(cmdargs):
     for inLazfile in lazlistfull:
         print(f"Processing LAS/LAZ file: {inLazfile}")
         data = laspy.read(inLazfile)
-        # Standardise on using LAS version 1.4
-        if data.header.version < laspy.header.Version(1, 4):
-            data = laspy.convert(data, file_version="1.4")
+        # Convert to older formats to the requested LAS version.
+        if data.header.version < cmdargs.minlasversion:
+            data = laspy.convert(data, file_version=cmdargs.minlasversion)
 
         # Calculate northing and easting of top-left corner of input tile
         northing = int(
