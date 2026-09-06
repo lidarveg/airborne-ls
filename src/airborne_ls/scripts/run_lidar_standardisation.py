@@ -194,6 +194,9 @@ def run_las_standardisation(cmdargs):
     for inLazfile in lazlistfull:
         print(f"Processing LAS/LAZ file: {inLazfile}")
         data = laspy.read(inLazfile)
+        # Standardise on using LAS version 1.4
+        if data.header.version < laspy.header.Version(1, 4):
+            data = laspy.convert(data, file_version="1.4")
 
         # Calculate northing and easting of top-left corner of input tile
         northing = int(
