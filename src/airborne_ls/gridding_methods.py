@@ -282,6 +282,7 @@ def createHeightAboveGround(nonGround, x, y, z, xVals, yVals, zVals):
     return heightAboveGround
 
 
+@njit
 def maxH_xyzLocs(x, y, z, psize, nullV=-999.0):
     """
     Compute the maximum height (z) and associated x, y locations for each grid cell.
@@ -298,7 +299,10 @@ def maxH_xyzLocs(x, y, z, psize, nullV=-999.0):
             - maxH: Maximum height values.
     """
     # Convert x, y coordinates to row and column indices
-    row, col = xyToRowCol(x, y, np.floor(np.min(x)), np.ceil(np.max(y)), psize)
+    xMin = np.floor(x.min())
+    yMax = np.ceil(y.max())
+    col = (np.floor((x - xMin) / psize)).astype(np.uint32)
+    row = (np.floor((yMax - y) / psize)).astype(np.uint32)
     numPts = len(row)
 
     # Determine the size of the grid
