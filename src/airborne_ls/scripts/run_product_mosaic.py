@@ -14,7 +14,6 @@ import os
 import argparse
 import glob
 import logging
-from pathlib import Path
 
 from osgeo import gdal
 
