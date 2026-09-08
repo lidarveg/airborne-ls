@@ -9,10 +9,11 @@ example: uv run python scripts/run_product_mosaic.py \
 
 """
 
-import argparse
-import logging
-import os
 import sys
+import os
+import argparse
+import glob
+import logging
 from pathlib import Path
 
 from osgeo import gdal
@@ -43,10 +44,8 @@ def getCmdargs(inputargs):
 
     parser.add_argument("--indir", required=True,
         help="Top-level directory containing input tiles.")
-    parser.add_argument("--outdr",
-        help="Directory to write mosaics. Default is the current directory.")
-    parser.add_argument("--laz_flist", required=True,
-        help="File containing the list of LAS/LAZ files.")
+    parser.add_argument("--outdir",
+        help="Directory to write mosaics. Default is same as indir")
     parser.add_argument("--tile_s", type=float, required=True,
         help="XY dimensions of LAS tile (metres).")
     parser.add_argument("--psize", default=0.5, type=float,
@@ -67,16 +66,11 @@ def getCmdargs(inputargs):
     cmdargs = parser.parse_args(inputargs)
 
     # Input checks
-    if not cmdargs.outdr:
-        cmdargs.outdr = Path(cmdargs.indir)
+    if cmdargs.outdir is None:
+        cmdargs.outdir = cmdargs.indir
 
-    if not Path(cmdargs.indir).exists():
+    if not os.path.isdir(cmdargs.indir):
         logger.error(f"Input directory {cmdargs.indir} not found.")
-        sys.exit(1)
-
-    cmdargs.laz_flist = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
-    if not cmdargs.laz_flist.is_file():
-        logger.error(f"File list {cmdargs.laz_flist} not found.")
         sys.exit(1)
 
     return cmdargs
@@ -92,17 +86,18 @@ def runMerge(cmdargs):
         outStageList = list(filenaming_methods.stageByProductName.values())
     productNameList = [filenaming_methods.productNameByStage[stage] for stage in outStageList]
 
-    # read in list of las files and extract batch subset
-    infiles = [line.strip() for line in open(cmdargs.laz_flist)]
+    # Start with the full list of LAZ files
+    infiles = sorted(glob.glob(f"{cmdargs.indir}/*.laz"))
 
     for productName in productNameList:
         missing_tiles = []
         tileFileList = []
         for lazfile in infiles:
-            subdir = os.path.join(cmdargs.indir, lazfile.replace('.laz', ''))
+            subdir = lazfile.replace('.laz', '')
             stage = filenaming_methods.stageByProductName[productName]
             projectName = qvf.getoptionfield(lazfile, 'p')
-            productFile = qvf.setoptionfield(lazfile, 'l', productName)
+            productFile = os.path.basename(lazfile)
+            productFile = qvf.setoptionfield(productFile, 'l', productName)
             productFile = qvf.setstagecode(productFile, stage)
             suffix = filenaming_methods.getSuffixFromDriverName(cmdargs.driver)
             productFile = qvf.setsuffix(productFile, suffix)
@@ -133,13 +128,14 @@ def runMerge(cmdargs):
             print("Missing", missing_tiles)
         if len(tileFileList) == 0:
             print("Missing everything")
+            sys.exit(1)
 
         # Create the mosaic output file, starting with the first input file name
         outFile = os.path.basename(tileFileList[0])
         outFile = qvf.setoptionfield(outFile, 'l', None)
         outFile = qvf.setoptionfield(outFile, 'p', None)
         outFile = qvf.setwhere(outFile, f"r{projectName}")
-        outFile = os.path.join(cmdargs.outdr, outFile)
+        outFile = os.path.join(cmdargs.outdir, outFile)
 
         vrtFilename = qvf.setsuffix(outFile, 'vrt')
         gdal.BuildVRT(vrtFilename, tileFileList)
