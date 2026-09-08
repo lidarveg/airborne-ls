@@ -99,7 +99,7 @@ def laspy2rec(infile):
 ###################################################################################################
 def standardise_lasf(what, when, utmZone, stageCode, projectName, outdr,
         data, easting, northing, tile_s, out_tile_s, binSize, filename_Parent,
-        classesToExclude, minZ, maxZ):
+        classesToExclude, minZ, maxZ, skipexisting):
     """
     Using laspy, rename file using naming convention, add index, remove noise and write out
     supplied files to .laz
@@ -138,114 +138,118 @@ def standardise_lasf(what, when, utmZone, stageCode, projectName, outdr,
             tileWhere = qvf.makeTileWhere(easting, northing, utmZone)
             outFile = qvf.setwhere(outfileTemplate, tileWhere)
 
-            # Exclude points which are outside the tile to be output
-            good_indices = (
-                (
-                    (float(easting_new + out_tile_s - 0.001) > data.x)
-                    & (float(easting_new + 0.001) <= data.x)
+            if not (skipexisting and os.path.exists(outFile)):
+                # Exclude points which are outside the tile to be output
+                good_indices = (
+                    (
+                        (float(easting_new + out_tile_s - 0.001) > data.x)
+                        & (float(easting_new + 0.001) <= data.x)
+                    )
+                    & (
+                        ((northing_new - 0.001) >= data.y)
+                        & ((northing_new - out_tile_s + 0.001) < data.y)
+                    )
                 )
-                & (
-                    ((northing_new - 0.001) >= data.y)
-                    & ((northing_new - out_tile_s + 0.001) < data.y)
-                )
-            )
-            # Exclude points outside acceptable height range
-            good_indices = (good_indices & ((minZ < data.z) & (data.z < maxZ)))
-            # Exclude any point classes the user requested
-            for classVal in classesToExclude:
-                good_indices = (good_indices & (data.classification != classVal))
+                # Exclude points outside acceptable height range
+                good_indices = (good_indices & ((minZ < data.z) & (data.z < maxZ)))
+                # Exclude any point classes the user requested
+                for classVal in classesToExclude:
+                    good_indices = (good_indices & (data.classification != classVal))
 
-            if np.sum(good_indices) > 0:
-                data2 = data[good_indices]
-                new_hdr = copy(data.header)
-                new_hdr.point_count = 0
-                new_las = laspy.LasData(new_hdr)
+                if np.sum(good_indices) > 0:
+                    data2 = data[good_indices]
+                    new_hdr = copy(data.header)
+                    new_hdr.point_count = 0
+                    new_las = laspy.LasData(new_hdr)
 
-                ##########################################################################
-                # GENERATE INDEX
-                nbinsRow = np.round(out_tile_s / binSize)  # ****
-                xIdx = ((data2.x - easting_new) // binSize).astype(np.int32)
-                yIdx = ((northing_new - np.array(data2.y)) // binSize).astype(
-                    np.int32
-                )
-                index = ((yIdx * nbinsRow) + xIdx).astype(int)
-                nbins = int(nbinsRow * nbinsRow)
+                    ##########################################################################
+                    # GENERATE INDEX
+                    nbinsRow = np.round(out_tile_s / binSize)  # ****
+                    xIdx = ((data2.x - easting_new) // binSize).astype(np.int32)
+                    yIdx = ((northing_new - np.array(data2.y)) // binSize).astype(
+                        np.int32
+                    )
+                    index = ((yIdx * nbinsRow) + xIdx).astype(int)
+                    nbins = int(nbinsRow * nbinsRow)
 
-                start = 0
-                newIdx = [0]
-                sortingIdx = []
-                # needs speeding up..
-                for ct, binIdx in enumerate(range(nbins + 1)):
-                    vals2 = np.argwhere(index == binIdx)
-                    if sum(vals2) >= 0:
-                        start += len(vals2)
-                        if len(sortingIdx) < 1:
-                            sortingIdx = vals2
-                        else:
-                            sortingIdx = np.append(sortingIdx, vals2)
-                        newIdx.append(np.copy(start))
-                newIdx.append(len(data2.x))
-                data2 = data2[sortingIdx]
-                del sortingIdx
+                    start = 0
+                    newIdx = [0]
+                    sortingIdx = []
+                    # needs speeding up..
+                    for ct, binIdx in enumerate(range(nbins + 1)):
+                        vals2 = np.argwhere(index == binIdx)
+                        if sum(vals2) >= 0:
+                            start += len(vals2)
+                            if len(sortingIdx) < 1:
+                                sortingIdx = vals2
+                            else:
+                                sortingIdx = np.append(sortingIdx, vals2)
+                            newIdx.append(np.copy(start))
+                    newIdx.append(len(data2.x))
+                    data2 = data2[sortingIdx]
+                    del sortingIdx
 
-                ##########################################################################
-                newIdx = np.array(newIdx, dtype=np.float64)
-                nElems = int(nbins + 1)
-                #############################
-                binS = struct.pack("2d", np.float64(binSize), np.float64(nbins))
-                # Instantiate and store new VLR.
-                new_vlr = laspy.VLR(
-                    user_id="BINSIZE",
-                    record_id=1,
-                    description="defines binSize chunk",
-                    record_data=binS,
-                )
-                new_las.vlrs.append(new_vlr)
-                #############################
-                bin_pos = struct.pack(f"{nElems}d", *newIdx[0:nElems])
-                # Instantiate and store new VLR.
-                new_vlr = laspy.VLR(
-                    user_id="BIN_POS",
-                    record_id=2,
-                    description="defines BIN_POS",
-                    record_data=bin_pos,
-                )
-                new_las.vlrs.append(new_vlr)
-                #####################################
-                # check nbins match tile_s
-                test_bins = int((out_tile_s / binSize) ** 2)
+                    ##########################################################################
+                    newIdx = np.array(newIdx, dtype=np.float64)
+                    nElems = int(nbins + 1)
+                    #############################
+                    binS = struct.pack("2d", np.float64(binSize), np.float64(nbins))
+                    # Instantiate and store new VLR.
+                    new_vlr = laspy.VLR(
+                        user_id="BINSIZE",
+                        record_id=1,
+                        description="defines binSize chunk",
+                        record_data=binS,
+                    )
+                    new_las.vlrs.append(new_vlr)
+                    #############################
+                    bin_pos = struct.pack(f"{nElems}d", *newIdx[0:nElems])
+                    # Instantiate and store new VLR.
+                    new_vlr = laspy.VLR(
+                        user_id="BIN_POS",
+                        record_id=2,
+                        description="defines BIN_POS",
+                        record_data=bin_pos,
+                    )
+                    new_las.vlrs.append(new_vlr)
+                    #####################################
+                    # check nbins match tile_s
+                    test_bins = int((out_tile_s / binSize) ** 2)
 
-                if test_bins != nbins:
-                    msg = "mis-match in bin indexing"
-                    logger.error(msg)
-                    raise ValueError(msg)
-                ###################################
-                new_las.points = data2.points.copy()
-                new_las.write(outFile)
+                    if test_bins != nbins:
+                        msg = "mis-match in bin indexing"
+                        logger.error(msg)
+                        raise ValueError(msg)
+                    ###################################
+                    new_las.points = data2.points.copy()
+                    new_las.write(outFile)
 
-                # check file is not corrupted.
-                with laspy.open(outFile) as las:
-                    point_count = las.header.point_count
-                    xmin, ymin, zmin = las.header.min  # noqa
-                    xmax, ymax, zmax = las.header.max  # noqa
+                    # check file is not corrupted.
+                    with laspy.open(outFile) as las:
+                        point_count = las.header.point_count
+                        xmin, ymin, zmin = las.header.min  # noqa
+                        xmax, ymax, zmax = las.header.max  # noqa
 
-                if point_count < 1:
-                    msg = f"File likely experienced wrapping: {outFile}"
-                    logger.error(msg)
-                    raise ValueError(msg)
-                if xmin < 1:
-                    msg = f"File likely experienced wrapping: {outFile}"
-                    logger.error(msg)
-                    raise ValueError(msg)
-                if ymax < 1:
-                    msg = f"File likely experienced wrapping: {outFile}"
-                    logger.error(msg)
-                    raise ValueError(msg)
+                    if point_count < 1:
+                        msg = f"File likely experienced wrapping: {outFile}"
+                        logger.error(msg)
+                        raise ValueError(msg)
+                    if xmin < 1:
+                        msg = f"File likely experienced wrapping: {outFile}"
+                        logger.error(msg)
+                        raise ValueError(msg)
+                    if ymax < 1:
+                        msg = f"File likely experienced wrapping: {outFile}"
+                        logger.error(msg)
+                        raise ValueError(msg)
 
-                status = "file indexed"
+                    status = "file indexed"
+                else:
+                    data2 = None
+                    status = "Status: No Good Indices"
             else:
-                data2 = None
-                status = "Status: No Good Indices"
+                print(f"Skipping outfile {outFile}, as it already exists")
+                status = "Status: Skipped, already exists"
 
     del data
 
@@ -344,12 +348,11 @@ def read_laz_index(infile, tile_s):
 
 
 ###################################################################################################
-def bin_data(indir, infile, tile_s, nbins):
+def bin_data(infile, tile_s, nbins):
     """
     Process LAS/LAZ files by binning data into a grid structure.
 
     Parameters:
-        indir (str): Directory containing the input LAS/LAZ files.
         infile (str): Name of the input LAS/LAZ file to process.
         tile_s (int): Tile size.
         nbins (int): Number of bins to divide the tile into.
@@ -372,9 +375,6 @@ def bin_data(indir, infile, tile_s, nbins):
     bin_names = np.array(bin_names)
     bins = {pos: np.zeros(1) for pos in bin_names}
 
-    # Construct the full path to the input file
-    infileFull = Path(indir).joinpath(infile)
-
     # Parse metadata from the input file name
     where = qvf.getwhere(infile)
     (easting, northing, utmZone) = filenaming_methods.decomposeWhereField(where)
@@ -384,7 +384,7 @@ def bin_data(indir, infile, tile_s, nbins):
         # Determine the location of the neighbouring tile
         (xoffset, yoffset) = tile_idx[p]
         neighbourWhere = filenaming_methods.neighbourTileWhere(where, xoffset, yoffset)
-        neighbourfile = qvf.setwhere(infileFull, neighbourWhere)
+        neighbourfile = qvf.setwhere(infile, neighbourWhere)
         # If the neighbouring file exists, process it
         if Path(neighbourfile).is_file():
             binSize, nbins, newIdx, data = read_laz_index(neighbourfile, tile_s)
@@ -397,7 +397,7 @@ def bin_data(indir, infile, tile_s, nbins):
             del data
 
     # Process the main input file
-    binSize, nbins, newIdx, data = read_laz_index(infileFull, tile_s)  # noqa
+    binSize, nbins, newIdx, data = read_laz_index(infile, tile_s)  # noqa
 
     # Assign data to bins for the main tile
     ct = 0

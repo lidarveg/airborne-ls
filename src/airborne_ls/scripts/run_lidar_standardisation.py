@@ -25,6 +25,7 @@ example:
 """
 
 import argparse
+import glob
 
 # Configure logging
 import logging
@@ -69,12 +70,14 @@ def getCmdargs(inputargs):
     parser = argparse.ArgumentParser(description="Standardise LAS/LAZ files for lidarveg.")
 
     # Input and output directories
-    parser.add_argument("--indir", required=True,
-        help="Full path to directory containing LAS/LAZ files.")
-    parser.add_argument("--outdr", required=True,
+    parser.add_argument("--indir", help=("Directory containing LAS/LAZ files " +
+        "to process."))
+    parser.add_argument("--infile", help="Name of a single LAS/LAZ file to process")
+    parser.add_argument("--skipexisting", default=False, action="store_true",
+        help=("Skip existing output LAZ files. Default will re-create any " +
+              "output files which already exist"))
+    parser.add_argument("--outdir", required=True,
         help="Directory for newly named and indexed LAS/LAZ files.")
-    parser.add_argument("--laz_flist", required=True,
-        help="Text file containing LAS/LAZ files to be processed; one file per row.")
     parser.add_argument("--minlasversion", default="1.4",
         help=("Minimum LAS format version for output files (default=%(default)s). " +
               "Newer format input files will preserve their newer version"))
@@ -111,47 +114,26 @@ def getCmdargs(inputargs):
     # Tile indexing options
     parser.add_argument("--binSize", default=50.0, type=float,
         help="XY bin size for data indexing (metres).")
-    parser.add_argument("--startfilenum", default=0, type=int,
-        help="Start position in file list for batch processing.")
-    parser.add_argument("--stopfilenum", type=int,
-        help="Stop position in file list for batch processing.")
 
     # Metadata flags
 
     cmdargs = parser.parse_args(inputargs)
 
-    # Validate input file list
-    infilelist = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
-    if not infilelist.is_file():
-        laslist = list(Path(cmdargs.indir).glob("*.las"))
-        lazlist = list(Path(cmdargs.indir).glob("*.laz"))
+    if cmdargs.indir is not None and cmdargs.infile is not None:
+        msg = "Use either --indir or --infile, but not both"
+        raise ValueError(msg)
 
-        if laslist:
-            laslist = reorder_flist(laslist)
-            cmdargs.laz_flist = "lazlist_auto"
-            outfile = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
-            with open(outfile, "w") as fout:
-                fout.writelines(f"{Path(fn).name}\n" for fn in laslist)
-
-        if lazlist:
-            lazlist = reorder_flist(lazlist)
-            cmdargs.laz_flist = "lazlist_auto"
-            outfile = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
-            print(f"outfile: {outfile}")
-            with open(outfile, "w") as fout:
-                fout.writelines(f"{Path(fn).name}\n" for fn in lazlist)
-
-    infilelist = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
-    if not infilelist.is_file():
-        raise AssertionError(f" laz_flist is invalid: {infilelist} ")
+    if cmdargs.indir is None and cmdargs.infile is None:
+        msg = "Must supply one of --indir or --infile"
+        raise ValueError(msg)
 
     # Validate project name
     if len(cmdargs.proj) != 6:
-        raise AssertionError("Project name must be exactly 6 characters.")
+        raise ValueError("Project name must be exactly 6 characters.")
 
     # Validate output directory
-    if not Path(cmdargs.outdr).exists():
-        raise AssertionError("Output directory does not exist.")
+    if not Path(cmdargs.outdir).exists():
+        raise ValueError(f"Output directory '{cmdargs.outdir}' does not exist")
 
     if (cmdargs.tile_s % cmdargs.out_tile_s) != 0:
         msg = (f"Input tile size {cmdargs.tile_s} not divisible by " +
@@ -178,16 +160,11 @@ def run_las_standardisation(cmdargs):
     Parameters:
         cmdargs (argparse.Namespace): Parsed command-line arguments.
     """
-    # Check input files
-    lazlistfull, _ = check_input_fns(
-        cmdargs.indir, Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
-    )
-
-    # Determine the range of files to process
-    if not cmdargs.stopfilenum:
-        cmdargs.stopfilenum = len(lazlistfull)
-    cmdargs.stopfilenum = min(cmdargs.stopfilenum, len(lazlistfull))
-    lazlistfull = lazlistfull[cmdargs.startfilenum : cmdargs.stopfilenum]
+    if cmdargs.infile is not None:
+        infileList = [cmdargs.infile]
+    elif cmdargs.indir is not None:
+        pattern = f"{cmdargs.indir}/*.la[sz]"
+        infileList = sorted(glob.glob(pattern))
 
     input_tileS = cmdargs.tile_s
 
@@ -200,7 +177,7 @@ def run_las_standardisation(cmdargs):
         raise ValueError(msg)
     stageCode = getStageCode(cmdargs)
 
-    for inLazfile in lazlistfull:
+    for inLazfile in infileList:
         print(f"Processing LAS/LAZ file: {inLazfile}")
         data = laspy.read(inLazfile)
         # Convert to older formats to the requested LAS version.
@@ -216,9 +193,9 @@ def run_las_standardisation(cmdargs):
         # Run chunked LAS filtering
         classesToExclude = [int(i) for i in cmdargs.excludeclasses.split(',')]
         _ = lazfile_rw.standardise_lasf(what, when, utmZone, stageCode,
-                cmdargs.proj, cmdargs.outdr, data, easting, northing, input_tileS,
+                cmdargs.proj, cmdargs.outdir, data, easting, northing, input_tileS,
                 cmdargs.out_tile_s, cmdargs.binSize, inLazfile, classesToExclude,
-                cmdargs.minz, cmdargs.maxz)
+                cmdargs.minz, cmdargs.maxz, cmdargs.skipexisting)
 
         del data
 
