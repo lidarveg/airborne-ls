@@ -26,9 +26,11 @@ uv run python scripts/run_tile_products.py \
 
 """
 
-import argparse
-import logging
 import sys
+import os
+import argparse
+import glob
+import logging
 from pathlib import Path
 
 import laspy
@@ -73,10 +75,14 @@ def getCmdargs(inputargs):
     )
 
     # Input and output directories
-    parser.add_argument("--indir", help="Directory containing LAS/LAZ files.")
-    parser.add_argument("--laz_flist", help="List of LAS/LAZ files to be processed.")
+    parser.add_argument("--indir",
+        help="Directory containing standardised, fully indexed LAZ files to process")
+    parser.add_argument("--infile",
+        help="Name of a single input standardised LAZ file to process")
+    # Will add a --skipexisting later ......
     parser.add_argument("--tile_s", type=float, help="XY dimensions of LAS tile in metres.")
-    parser.add_argument("--epsg", type=int, help="EPSG code for map information.")
+    parser.add_argument("--epsg", type=int,
+        help="EPSG number of map projection used in the input LAZ files")
 
     # Output resolutions
     parser.add_argument("--psize", default=0.5, type=float,
@@ -90,10 +96,6 @@ def getCmdargs(inputargs):
         help="Pixel size of the CHM layer (metres). Default: %(default)s.")
 
     # File processing options
-    parser.add_argument("--startfilenum", default=0, type=int,
-        help="Position within laz_flist to start batch processing. Default: %(default)s.")
-    parser.add_argument("--stopfilenum", type=int,
-        help="Position within laz_flist to stop batch processing.")
     parser.add_argument("--split_fpc", default=False, action=argparse.BooleanOptionalAction,
         help="Split flight lines for FPC calculations.")
     parser.add_argument("--binmargin", type=int, default=33,
@@ -105,42 +107,19 @@ def getCmdargs(inputargs):
 
     cmdargs = parser.parse_args(inputargs)
 
-    # Handle input file list
-    infilelist = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
-    if not infilelist.is_file():
-        laslist = list(Path(cmdargs.indir).glob("*.las"))
-        lazlist = list(Path(cmdargs.indir).glob("*.laz"))
+    if cmdargs.indir is not None and cmdargs.infile is not None:
+        msg = "Use either --indir or --infile, but not both"
+        raise ValueError(msg)
 
-        # Process .las files
-        if laslist:
-            laslist = reorder_flist(laslist)
-            outfile = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
-            with open(outfile, "w") as fout:
-                fout.writelines(f"{Path(fn).name}\n" for fn in laslist)
+    if cmdargs.indir is None and cmdargs.infile is None:
+        msg = "Must supply one of --indir or --infile"
+        raise ValueError(msg)
 
-        # Process .laz files
-        if lazlist:
-            lazlist = reorder_flist(lazlist)
-            outfile = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
-            with open(outfile, "w") as fout:
-                fout.writelines(f"{Path(fn).name}\n" for fn in lazlist)
+    if cmdargs.epsg is None:
+        raise ValueError("EPSG code must be supplied.")
 
-    # Validate command-line inputs
-    laz_flist = Path(cmdargs.indir).joinpath(cmdargs.laz_flist)
-    if not laz_flist.is_file():
-        raise AssertionError(f"laz_flist is invalid: {laz_flist} ")
-
-    if not cmdargs.epsg:
-        raise AssertionError("EPSG code must be supplied.")
-
-    if cmdargs.stopfilenum is None:
-        if laz_flist.is_file():
-            with open(laz_flist) as f:
-                lazlist = [line.strip() for line in f]
-        cmdargs.stopfilenum = len(lazlist)
-
-    if not cmdargs.tile_s:
-        raise AssertionError("No cmdargs.tile_s supplied.")
+    if cmdargs.tile_s is None:
+        raise ValueError("No cmdargs.tile_s supplied.")
 
     return cmdargs
 
@@ -155,39 +134,26 @@ def run_tile_products(cmdargs):
     # Check if the supplied pixel sizes are divisible
     check_divisible([cmdargs.psize, cmdargs.ptile_s, cmdargs.fpc_psize])
 
-    # Read the list of LAS/LAZ files and extract the batch subset
-    with open(Path(cmdargs.indir).joinpath(cmdargs.laz_flist)) as f:
-        infiles = [line.strip() for line in f]
+    if cmdargs.infile is not None:
+        infilelist = [cmdargs.infile]
+    elif cmdargs.indir is not None:
+        pattern = f"{cmdargs.indir}/*.laz"
+        infilelist = sorted(glob.glob(pattern))
 
-    if not cmdargs.stopfilenum:
-        cmdargs.stopfilenum = len(infiles)
-    cmdargs.stopfilenum = min(cmdargs.stopfilenum, len(infiles))
-
-    infiles = infiles[cmdargs.startfilenum : cmdargs.stopfilenum]
     nullVal = -999.0
     neigh8 = np.array(
         [[-1, 1], [0, 1], [1, 1], [-1, 0], [1, 0], [-1, -1], [0, -1], [1, -1]]
     )
 
     # Read the first file to get bin size and number of bins
-    binSize, nbins, _, data = lazfile_rw.read_laz_index(
-        Path(cmdargs.indir).joinpath(infiles[0]), cmdargs.tile_s
-    )
-    del data
+    (binSize, nbins, _, _) = lazfile_rw.read_laz_index(infilelist[0], cmdargs.tile_s)
 
-    logger.info(f"binSize = {binSize} and nbins = {nbins} for {infiles[0]}")
+    logger.info(f"binSize = {binSize} and nbins = {nbins} for {infilelist[0]}")
 
     # Process each file in the batch
-    for infile in infiles:
+    for infileFull in infilelist:
+        infile = os.path.basename(infileFull)
         print(infile)
-        infileFull = Path(cmdargs.indir).joinpath(infile)
-        if not Path.is_file(Path(infileFull)):
-            msg = f"LAZ file {infileFull} not found."
-            logger.error(msg)
-            raise ValueError(msg)
-
-        # Parse metadata from the input file name
-        # fn_dict = filenaming_methods.createTileDict(infile, cmdargs.tile_s)
 
         # Set up output directories and filenames
         outputDir = Path(infileFull).with_suffix("")
@@ -230,7 +196,7 @@ def run_tile_products(cmdargs):
         # read in data
         # bData stores the data in chunks/bins for rapid access
         bData, northing, easting, rowS = lazfile_rw.bin_data(
-            cmdargs.indir, infile, cmdargs.tile_s, nbins
+            infileFull, cmdargs.tile_s, nbins
         )
 
         logger.info(f"Indexed LAZ FILE read in for {infileFull}")
@@ -511,14 +477,11 @@ def run_tile_products(cmdargs):
 
         # calculate and write out to a temporary file return,pulse,area stats while
         # data held in memory
-        infileFull = Path(cmdargs.indir).joinpath(infile)
         with laspy.open(infileFull) as f:
             nReturns = f.header.point_count
-        f.close()
-        dem_area = np.sum(demTile > 0)
+        dem_area = np.count_nonzero(demTile != nullVal)
         nPulses = np.sum(ptDenTile)
 
-        infileFull = Path(cmdargs.indir).joinpath(infile)
         outfile = Path(
             str(outfnames["dem"]).replace(
                 Path(outfnames["dem"]).suffix, "_tempStats.txt"
@@ -530,7 +493,6 @@ def run_tile_products(cmdargs):
             fout.write(f"nPulses = {nPulses}\n")
             fout.write(f"nReturns = {nReturns}\n")
             fout.write(f"DEM area (pixels) = {dem_area}\n")
-        fout.close()
 
 
 ###################################################################################################
