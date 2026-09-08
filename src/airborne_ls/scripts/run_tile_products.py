@@ -409,12 +409,13 @@ def run_tile_products(cmdargs):
         #######################
         # interpolating over buildings can be a problem - msk out affected pixels here
         multi = cmdargs.psize / cmdargs.chm_psize
-        veg_msk = (non_grTile == const.PTCLASS_BUILDING) * 1 + (non_grTile == const.PTCLASS_WATER) * 1
+        veg_msk = np.logical_or(non_grTile == const.PTCLASS_BUILDING,
+                                non_grTile == const.PTCLASS_WATER)
         veg_msk = ndimage.zoom(veg_msk, multi, order=0)
         struct2 = ndimage.generate_binary_structure(2, 2)
         veg_msk = ndimage.binary_dilation(veg_msk, structure=struct2)
         veg_msk = ndimage.binary_dilation(veg_msk, structure=struct2)
-        chmTile[veg_msk > 0] = 0
+        chmTile[veg_msk] = 0
 
         masked_array = np.ma.masked_equal(chmTile, 0)
         chmTile = ndimage.median_filter(
