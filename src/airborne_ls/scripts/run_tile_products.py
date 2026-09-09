@@ -187,294 +187,35 @@ def run_tile_products(cmdargs):
         maxhTile = np.full(tileShape, nullVal, dtype=np.float32)
         intensTile = np.full(tileShape, nullVal, dtype=np.float32)
         ptDenTile = np.zeros(tileShape, dtype=np.uint16)
-        # rtnClassNull # testing addition of new code to infill holes
         grTile = np.full(tileShape, 254, dtype=np.uint8)
         non_grTile = np.full(tileShape, 254, dtype=np.uint8)
         pctTile = np.full(tilePctShape, nullVal, dtype=np.float32)
         fpcTile = np.full(tileFpcShape, rtnClassNull, dtype=np.float32)
 
-        # read in data
-        # bData stores the data in chunks/bins for rapid access
-        bData, northing, easting, rowS = lazfile_rw.bin_data(
-            infileFull, cmdargs.tile_s, nbins
-        )
+        # read in point data for the tile
+        # allDataByBin stores the point data in chunks/bins for rapid access
+        (allDataByBin, northing, easting, numBinRows) = lazfile_rw.bin_data(
+            infileFull, cmdargs.tile_s, nbins)
+        numBinCols = numBinRows
 
         logger.info(f"Indexed LAZ FILE read in for {infileFull}")
 
-        nRows = int(np.ceil(binSize / cmdargs.psize))
-        nCols = int(np.ceil(binSize / cmdargs.psize))
+        # The number of pixel rows/cols for the standard pixel size
+        nRowsPerBin = int(np.ceil(binSize / cmdargs.psize))
+        nColsPerBin = int(np.ceil(binSize / cmdargs.psize))
 
-        for rowB in range(1, rowS + 1, 1):
-            for colB in range(1, rowS + 1, 1):
-                fnc = f"row_{rowB}_col_{colB}"
-                binTopLeftX = easting + binSize * (colB - 1)
-                binTopLeftY = northing - cmdargs.tile_s + binSize * rowB
-                binChunk = np.copy(bData[fnc])  # reset as we don't need buffer
-                chunk = np.copy(bData[fnc])
-                if len(chunk) > 10:
-                    for n8 in neigh8:
-                        fn = f"row_{int(rowB + n8[0])}_col_{int(colB + n8[1])}"
-                        nbrBinData = np.copy(bData[fn])
-                        if (nbrBinData.shape)[0] > 1:
-                            nbrBinData = trimNeighbourBin(nbrBinData, n8[0], n8[1],
-                                cmdargs.binmargin, binTopLeftX, binTopLeftY, binSize)
-                            chunk = np.concatenate((chunk, nbrBinData))
+        for binRow in range(1, numBinRows + 1):
+            for binCol in range(1, numBinCols + 1):
+                processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8,
+                    easting, northing, nRowsPerBin, nColsPerBin, nullVal, numBinRows,
+                    demTile, csmTile, chmTile, maxhTile, intensTile, ptDenTile, grTile,
+                    non_grTile, pctTile, fpcTile)
 
-                    # run dem
-                    grdhits = (chunk["CLASSIFICATION"] == const.PTCLASS_GROUND)
-                    if np.sum(grdhits) > 10:
-                        # Set up a slice object for the part of the main tile arrays
-                        # covering the current bin. Applies only to arrays of tileShape
-                        xst = int(int((colB - 1) * binSize) / cmdargs.psize)
-                        yst = int(int((rowS - rowB) * binSize) / cmdargs.psize)
-                        binSlice = (slice(yst, (yst + nRows)), slice(xst, (xst + nRows)))
+        del allDataByBin
 
-                        xst_bin = easting + int((colB - 1) * binSize)
-                        yst_bin = northing - int((rowS - rowB) * binSize)
-                        if np.sum(grdhits) > 0:
-                            dem = gridding_methods.makeDemTile(
-                                chunk["X"][grdhits], chunk["Y"][grdhits],
-                                chunk["Z"][grdhits], xst_bin, yst_bin, binSize,
-                                cmdargs.psize, nullVal=nullVal)
-                            demTile[binSlice] = dem
-
-                        # Get pixel coords of each point return, within the array for the bin
-                        (row, col) = gridding_methods.xyToRowCol(
-                            binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
-                            cmdargs.psize)
-
-                        # Count return classes per-pixel
-                        classCountsShape = (CLASSCOUNTS_MAXCLASS + 1, nRows, nCols)
-                        classCounts = np.zeros(classCountsShape, dtype=np.uint16)
-                        gridding_methods.makeClassCounts(row, col, binChunk["X"],
-                            binChunk["Y"], binChunk["Z"], binChunk["CLASSIFICATION"],
-                            classCounts)
-
-                        #######################################################################
-                        # run csm
-                        xValsA, yValsA, zValsA = gridding_methods.maxH_xyzLocs(
-                            chunk["X"], chunk["Y"], chunk["Z"], cmdargs.psize
-                        )
-                        csm = gridding_methods.makeDemTile(
-                            xValsA, yValsA, zValsA, xst_bin, yst_bin,
-                            binSize, cmdargs.psize, nullVal=nullVal)
-                        csm = csm - dem
-                        csm[dem == nullVal] = nullVal
-                        csmTile[binSlice] = csm
-                        csmTile[csmTile < -5] = nullVal
-                        #######################################################################
-                        # interp to irregular grid
-                        nonGround = (binChunk["CLASSIFICATION"] != const.PTCLASS_GROUND)
-
-                        heightAboveGround = (
-                            gridding_methods.createHeightAboveGround(nonGround,
-                                binChunk["X"], binChunk["Y"], binChunk["Z"],
-                                chunk["X"][grdhits], chunk["Y"][grdhits], chunk["Z"][grdhits])
-                        )
-
-                        pntIntensity = binChunk["INTENSITY"]
-                        # pntClass = binChunk["CLASSIFICATION"]
-                        zArr = np.full((nRows, nCols), nullVal, dtype=np.float32)
-                        intensityAtMaxH = np.full((nRows, nCols), nullVal, dtype=np.int16)
-                        # Everywhere that we actually have data, initialize to zero
-                        zArr[row, col] = 0
-                        intensityAtMaxH[row, col] = 0
-                        xArr = np.full((nRows, nCols), nullVal, dtype=np.float32)
-                        yArr = np.full((nRows, nCols), nullVal, dtype=np.float32)
-                        haveGroundReturn = np.full((nRows, nCols), 254, dtype=np.uint8)
-                        nonGroundClasses = np.full((nRows, nCols), 254, dtype=np.uint8)
-
-                        gridding_methods.maxH_workflow_layers(
-                            row, col, binChunk["X"], binChunk["Y"],
-                            heightAboveGround, pntIntensity, binChunk["CLASSIFICATION"],
-                            xArr, yArr, zArr, intensityAtMaxH, haveGroundReturn)
-
-                        # nonGroundClasses is most common non-ground class in each pixel
-                        classCountsNonGround = np.copy(classCounts)
-                        classCountsNonGround[const.PTCLASS_GROUND] = 0
-                        nonGroundClasses = classCountsNonGround.argmax(axis=0)
-                        del classCountsNonGround
-
-                        maxhTile[binSlice] = zArr
-                        intensTile[binSlice] = intensityAtMaxH
-                        grTile[binSlice] = haveGroundReturn
-                        non_grTile[binSlice] = nonGroundClasses
-
-                        #######################################################################
-                        # CREATE Canopy Height Model
-                        # refer Khosravipour_2014 pit-free
-                        number_veg_rets = np.sum(
-                            binChunk["CLASSIFICATION"] == const.PTCLASS_MEDIUMVEGETATION
-                        ) + np.sum(
-                            binChunk["CLASSIFICATION"] == const.PTCLASS_HIGHVEGETATION
-                        )  # could drop / add classification value of 3 (i.e. low veg)
-                        if number_veg_rets > 10:
-                            (row_chm, col_chm) = gridding_methods.xyToRowCol(
-                                binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
-                                cmdargs.chm_psize)
-                            nRows_chm = int(np.ceil(binSize / cmdargs.chm_psize))
-                            nCols_chm = int(np.ceil(binSize / cmdargs.chm_psize))
-                            xst_chm = int(
-                                int((colB - 1) * binSize) / cmdargs.chm_psize
-                            )
-                            yst_chm = int(
-                                int((rowS - rowB) * binSize) / cmdargs.chm_psize
-                            )
-
-                            maxH_hag = np.full((nRows_chm, nCols_chm), nullVal,
-                                               dtype=np.float32)
-                            gridding_methods.maxH_array(
-                                row_chm, col_chm, heightAboveGround, maxH_hag
-                            )
-                            maxH_vals = (
-                                chunk["CLASSIFICATION"] <= const.PTCLASS_HIGHVEGETATION
-                            )  # this includes unclassified returns.. not sure of zero?
-                            chunk_hag = gridding_methods.createHeightAboveGround(
-                                maxH_vals, chunk["X"], chunk["Y"], chunk["Z"],
-                                chunk["X"][grdhits], chunk["Y"][grdhits], chunk["Z"][grdhits])
-                            vals = np.logical_and(
-                                chunk["CLASSIFICATION"] >= const.PTCLASS_LOWVEGETATION,
-                                chunk["CLASSIFICATION"] <= const.PTCLASS_HIGHVEGETATION,
-                            )
-                            if np.sum(vals) > 5:
-                                chmVeg = gridding_methods.chm_alg(
-                                    chunk[vals], chunk_hag[vals], maxH_hag,
-                                    cmdargs.chm_psize, xst_bin, yst_bin,
-                                    binSize, nRows_chm, nCols_chm, nullVal)
-                                chmTile[
-                                    yst_chm : (yst_chm + nRows_chm),
-                                    xst_chm : (xst_chm + nCols_chm),
-                                ] = chmVeg
-
-                        ##############################
-                        # run pulse density density
-                        density = np.zeros((nRows, nCols), dtype=np.uint32)
-                        fstR = binChunk["RETURN_NUMBER"] == 1
-                        if np.sum(fstR) > 0:
-                            (row_1st, col_1st) = gridding_methods.xyToRowCol(
-                                binChunk["X"][fstR], binChunk["Y"][fstR],
-                                xst_bin, yst_bin, cmdargs.psize)
-                            gridding_methods.fstR_density(
-                                row_1st, col_1st,
-                                binChunk["X"][fstR], binChunk["Y"][fstR],
-                                density)
-                            ptDenTile[binSlice] = density
-                        ############################
-                        # run percentiles
-                        (percentile_arr, nRows_pct) = (
-                            gridding_methods.doHeightPercentileOutputs_idx(
-                                binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
-                                binSize, heightAboveGround, cmdargs.ptile_s,
-                                pptiles=percentiles, nullVal=nullVal))
-                        xst_pct = int(int((colB - 1) * binSize) / cmdargs.ptile_s)
-                        yst_pct = int(int((rowS - rowB) * binSize) / cmdargs.ptile_s)
-                        pctTile[
-                            :,
-                            yst_pct : (yst_pct + nRows_pct),
-                            xst_pct : (xst_pct + nRows_pct),
-                        ] = percentile_arr
-
-                        ############################
-                        # run FPC
-                        xst_fpc = int(int((colB - 1) * binSize) / cmdargs.fpc_psize)
-                        yst_fpc = int(int((rowS - rowB) * binSize) / cmdargs.fpc_psize)
-                        nRows_fpc = int(np.ceil(binSize / cmdargs.fpc_psize))
-                        # nCols_fpc = int(np.ceil(binSize / cmdargs.fpc_psize))
-
-                        flightlines = fpc_method.check_pts_pulses(binChunk)
-                        canopyThreshold = 1.7
-                        hag = heightAboveGround
-
-                        fpc = fpc_method.doFPC(xst_bin, yst_bin, binChunk,
-                            flightlines, hag, cmdargs.fpc_psize,
-                            binSize, cmdargs.split_fpc, canopyThreshold)
-                        fpcTile[
-                            yst_fpc : (yst_fpc + nRows_fpc),
-                            xst_fpc : (xst_fpc + nRows_fpc),
-                        ] = fpc
-                        ############################
-                        del chunk, binChunk, flightlines, hag
-        del bData
-
-        rw_image_methods.writeImage(
-            np.round(demTile, 3),
-            outfnames["dem"], tlx=easting, tly=northing,
-            binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=nullVal,
-            parent_file=infileFull, driverName=cmdargs.driver)
-        rw_image_methods.writeImage(
-            np.round(csmTile, 3),
-            outfnames["csm"], tlx=easting, tly=northing,
-            binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=nullVal,
-            parent_file=infileFull, driverName=cmdargs.driver)
-        #######################
-        # interpolating over buildings can be a problem - msk out affected pixels here
-        multi = cmdargs.psize / cmdargs.chm_psize
-        veg_msk = np.logical_or(non_grTile == const.PTCLASS_BUILDING,
-                                non_grTile == const.PTCLASS_WATER)
-        veg_msk = ndimage.zoom(veg_msk, multi, order=0)
-        struct2 = ndimage.generate_binary_structure(2, 2)
-        veg_msk = ndimage.binary_dilation(veg_msk, structure=struct2)
-        veg_msk = ndimage.binary_dilation(veg_msk, structure=struct2)
-        chmTile[veg_msk] = 0
-
-        masked_array = np.ma.masked_equal(chmTile, 0)
-        chmTile = ndimage.median_filter(
-            masked_array, size=3
-        )  # median filter ignoring zeros
-        chmTile[chmTile < 0.5] = nullVal
-        rw_image_methods.writeImage(
-            np.round(chmTile, 3),
-            outfnames["chm"], tlx=easting, tly=northing,
-            binsize=cmdargs.chm_psize, epsg=cmdargs.epsg, nullVal=nullVal,
-            parent_file=infileFull, driverName=cmdargs.driver)
-        #########################
-        rw_image_methods.writeImage(
-            np.round(maxhTile, 3),
-            outfnames["maxH"], tlx=easting, tly=northing,
-            binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=nullVal,
-            parent_file=infileFull, driverName=cmdargs.driver)
-        rw_image_methods.writeImage(
-            np.round(intensTile, 4),
-            outfnames["intens"], tlx=easting, tly=northing,
-            binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=nullVal,
-            parent_file=infileFull, driverName=cmdargs.driver)
-        rw_image_methods.writeImage(
-            grTile, outfnames["grdR"], tlx=easting, tly=northing,
-            binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=rtnClassNull,
-            parent_file=infileFull, overviewResampling="MODE",
-            driverName=cmdargs.driver)
-        rw_image_methods.writeImage(
-            non_grTile, outfnames["NonGrdCodes"],
-            tlx=easting, tly=northing, binsize=cmdargs.psize, epsg=cmdargs.epsg,
-            nullVal=rtnClassNull, parent_file=infileFull, overviewResampling="MODE",
-            driverName=cmdargs.driver)
-        rw_image_methods.writeImage(
-            ptDenTile, outfnames["fstDens"],
-            tlx=easting, tly=northing, binsize=cmdargs.psize, epsg=cmdargs.epsg,
-            nullVal=0, parent_file=infileFull, driverName=cmdargs.driver)
-        for idx, pp in enumerate(percentiles):
-            layer = pctTile[idx, :, :]
-            productName = f"percentile{pp}"
-            rw_image_methods.writeImage(
-                np.round(layer, 3), outfnames[productName], tlx=easting, tly=northing,
-                binsize=cmdargs.ptile_s, epsg=cmdargs.epsg, nullVal=nullVal,
-                parent_file=infileFull, driverName=cmdargs.driver)
-        rw_image_methods.writeImage(
-            np.rint(fpcTile).astype(np.uint8), outfnames["fpc"],
-            tlx=easting, tly=northing, binsize=cmdargs.fpc_psize, epsg=cmdargs.epsg,
-            nullVal=rtnClassNull, parent_file=infileFull, driverName=cmdargs.driver)
-
-        # Apply colour tables
-        fpcClrTbl = fpc_method.makeFPCcolorTable()
-        rw_image_methods.setColorTable(outfnames["fpc"], fpcClrTbl)
-        nonGrdClrTbl = makeNonGroundClrTbl()
-        rw_image_methods.setColorTable(outfnames["NonGrdCodes"], nonGrdClrTbl)
-
-        logger.info(f"Tiles written to file {infileFull}")
-
-        demOptions = gdal.DEMProcessingOptions(computeEdges=True)
-        gdal.DEMProcessing(outfnames["demHS"], outfnames["dem"], "hillshade",
-            options=demOptions)
+        writeOutputRasters(cmdargs, outfnames, easting, northing, nullVal, infileFull,
+            demTile, csmTile, chmTile, maxhTile, intensTile, ptDenTile, grTile,
+            non_grTile, pctTile, fpcTile)
 
         # calculate and write out to a temporary file return,pulse,area stats while
         # data held in memory
@@ -494,6 +235,320 @@ def run_tile_products(cmdargs):
             fout.write(f"nPulses = {nPulses}\n")
             fout.write(f"nReturns = {nReturns}\n")
             fout.write(f"DEM area (pixels) = {dem_area}\n")
+
+
+def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, easting, northing,
+        nRowsPerBin, nColsPerBin, nullVal, numBinRows, demTile, csmTile, chmTile, maxhTile,
+        intensTile, ptDenTile, grTile, non_grTile, pctTile, fpcTile):
+    """
+    Do all calculation for a single index bin. Fills in the pixels for the bin
+    into all the output arrays for the tile.
+
+    The *Tile parameters are all arrays of the whole tile, with their dimensions
+    being dependant on the resolution of the particular product. They are modified
+    in-place by this function, filling in the calculated data for the current bin.
+
+    Parameters:
+      binRow, binCol (int): The row/col numbers of the bin to process. Note that in the
+                            bin coordinate scheme, row 0 is southern-most.
+      cmdargs (argparse.Namespace): The command arguments object
+      binSize (float): Size of bin edge (metres)
+      neigh8 (array): 1/0/-1 values for offset to 8 neighbouring bins
+      easting, northing (float): Coordinates (metres) of top-left corner of the
+                                 whole tile
+      nRowsPerBin, nColsPerBin (int): Number of rows & cols of standard pixels in each bin
+      nullVal (float): Null value for most of the arrays
+      numBinRows (int): Number of rows of bins in the whole tile
+      demTile : Output array for ground DEM
+      csmTile : Output array for Canopy Surface Model
+      chmTile : Output array for Canopy Height Model
+      maxhTile : Output array for max height
+      intensTile : Output array for intensity
+      ptDenTile : Output array for per-pixel point density
+      grTile : Output array for ?????
+      non_grTile : Output array for ?????
+      pcntTile : Output array for vegetation height percentiles
+      fpcTile : Output array for Foliage Projective Cover
+    """
+    binKey = f"row_{binRow}_col_{binCol}"
+    binTopLeftX = easting + binSize * (binCol - 1)
+    binTopLeftY = northing - cmdargs.tile_s + binSize * binRow
+    binChunk = np.copy(allDataByBin[binKey])  # reset as we don't need buffer
+    chunk = np.copy(allDataByBin[binKey])
+    if len(chunk) > 10:
+        for n8 in neigh8:
+            nbrBinKey = f"row_{int(binRow + n8[0])}_col_{int(binCol + n8[1])}"
+            nbrBinData = np.copy(allDataByBin[nbrBinKey])
+            if (nbrBinData.shape)[0] > 1:
+                nbrBinData = trimNeighbourBin(nbrBinData, n8[0], n8[1],
+                    cmdargs.binmargin, binTopLeftX, binTopLeftY, binSize)
+                chunk = np.concatenate((chunk, nbrBinData))
+
+        # run dem
+        grdhits = (chunk["CLASSIFICATION"] == const.PTCLASS_GROUND)
+        if np.sum(grdhits) > 10:
+            # Set up a slice object for the part of the main tile arrays
+            # covering the current bin. Applies only to arrays of tileShape
+            xst = int(int((binCol - 1) * binSize) / cmdargs.psize)
+            yst = int(int((numBinRows - binRow) * binSize) / cmdargs.psize)
+            binSlice = (slice(yst, (yst + nRowsPerBin)), slice(xst, (xst + nColsPerBin)))
+
+            xst_bin = easting + int((binCol - 1) * binSize)
+            yst_bin = northing - int((numBinRows - binRow) * binSize)
+            if np.sum(grdhits) > 0:
+                dem = gridding_methods.makeDemTile(
+                    chunk["X"][grdhits], chunk["Y"][grdhits],
+                    chunk["Z"][grdhits], xst_bin, yst_bin, binSize,
+                    cmdargs.psize, nullVal=nullVal)
+                demTile[binSlice] = dem
+
+            # Get pixel coords of each point return, within the array for the bin
+            (row, col) = gridding_methods.xyToRowCol(
+                binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
+                cmdargs.psize)
+
+            # Count return classes per-pixel
+            classCountsShape = (CLASSCOUNTS_MAXCLASS + 1, nRowsPerBin, nColsPerBin)
+            classCounts = np.zeros(classCountsShape, dtype=np.uint16)
+            gridding_methods.makeClassCounts(row, col, binChunk["X"],
+                binChunk["Y"], binChunk["Z"], binChunk["CLASSIFICATION"],
+                classCounts)
+
+            #######################################################################
+            # run csm
+            xValsA, yValsA, zValsA = gridding_methods.maxH_xyzLocs(
+                chunk["X"], chunk["Y"], chunk["Z"], cmdargs.psize
+            )
+            csm = gridding_methods.makeDemTile(
+                xValsA, yValsA, zValsA, xst_bin, yst_bin,
+                binSize, cmdargs.psize, nullVal=nullVal)
+            csm = csm - dem
+            csm[dem == nullVal] = nullVal
+            csmTile[binSlice] = csm
+            csmTile[csmTile < -5] = nullVal
+            #######################################################################
+            # interp to irregular grid
+            nonGround = (binChunk["CLASSIFICATION"] != const.PTCLASS_GROUND)
+
+            heightAboveGround = (
+                gridding_methods.createHeightAboveGround(nonGround,
+                    binChunk["X"], binChunk["Y"], binChunk["Z"],
+                    chunk["X"][grdhits], chunk["Y"][grdhits], chunk["Z"][grdhits])
+            )
+
+            pntIntensity = binChunk["INTENSITY"]
+            # pntClass = binChunk["CLASSIFICATION"]
+            zArr = np.full((nRowsPerBin, nColsPerBin), nullVal, dtype=np.float32)
+            intensityAtMaxH = np.full((nRowsPerBin, nColsPerBin), nullVal, dtype=np.int16)
+            # Everywhere that we actually have data, initialize to zero
+            zArr[row, col] = 0
+            intensityAtMaxH[row, col] = 0
+            xArr = np.full((nRowsPerBin, nColsPerBin), nullVal, dtype=np.float32)
+            yArr = np.full((nRowsPerBin, nColsPerBin), nullVal, dtype=np.float32)
+            haveGroundReturn = np.full((nRowsPerBin, nColsPerBin), 254, dtype=np.uint8)
+            nonGroundClasses = np.full((nRowsPerBin, nColsPerBin), 254, dtype=np.uint8)
+
+            gridding_methods.maxH_workflow_layers(
+                row, col, binChunk["X"], binChunk["Y"],
+                heightAboveGround, pntIntensity, binChunk["CLASSIFICATION"],
+                xArr, yArr, zArr, intensityAtMaxH, haveGroundReturn)
+
+            # nonGroundClasses is most common non-ground class in each pixel
+            classCountsNonGround = np.copy(classCounts)
+            classCountsNonGround[const.PTCLASS_GROUND] = 0
+            nonGroundClasses = classCountsNonGround.argmax(axis=0)
+            del classCountsNonGround
+
+            maxhTile[binSlice] = zArr
+            intensTile[binSlice] = intensityAtMaxH
+            grTile[binSlice] = haveGroundReturn
+            non_grTile[binSlice] = nonGroundClasses
+
+            #######################################################################
+            # CREATE Canopy Height Model
+            # refer Khosravipour_2014 pit-free
+            number_veg_rets = np.sum(
+                binChunk["CLASSIFICATION"] == const.PTCLASS_MEDIUMVEGETATION
+            ) + np.sum(
+                binChunk["CLASSIFICATION"] == const.PTCLASS_HIGHVEGETATION
+            )  # could drop / add classification value of 3 (i.e. low veg)
+            if number_veg_rets > 10:
+                (row_chm, col_chm) = gridding_methods.xyToRowCol(
+                    binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
+                    cmdargs.chm_psize)
+                nRows_chm = int(np.ceil(binSize / cmdargs.chm_psize))
+                nCols_chm = int(np.ceil(binSize / cmdargs.chm_psize))
+                xst_chm = int(
+                    int((binCol - 1) * binSize) / cmdargs.chm_psize
+                )
+                yst_chm = int(
+                    int((numBinRows - binRow) * binSize) / cmdargs.chm_psize
+                )
+
+                maxH_hag = np.full((nRows_chm, nCols_chm), nullVal,
+                                   dtype=np.float32)
+                gridding_methods.maxH_array(row_chm, col_chm,
+                    heightAboveGround, maxH_hag)
+                maxH_vals = (
+                    chunk["CLASSIFICATION"] <= const.PTCLASS_HIGHVEGETATION
+                )  # this includes unclassified returns.. not sure of zero?
+                chunk_hag = gridding_methods.createHeightAboveGround(
+                    maxH_vals, chunk["X"], chunk["Y"], chunk["Z"],
+                    chunk["X"][grdhits], chunk["Y"][grdhits], chunk["Z"][grdhits])
+                vals = np.logical_and(
+                    chunk["CLASSIFICATION"] >= const.PTCLASS_LOWVEGETATION,
+                    chunk["CLASSIFICATION"] <= const.PTCLASS_HIGHVEGETATION,
+                )
+                if np.sum(vals) > 5:
+                    chmVeg = gridding_methods.chm_alg(
+                        chunk[vals], chunk_hag[vals], maxH_hag,
+                        cmdargs.chm_psize, xst_bin, yst_bin,
+                        binSize, nRows_chm, nCols_chm, nullVal)
+                    chmTile[
+                        yst_chm : (yst_chm + nRows_chm),
+                        xst_chm : (xst_chm + nCols_chm),
+                    ] = chmVeg
+
+            ##############################
+            # run pulse density density
+            density = np.zeros((nRowsPerBin, nColsPerBin), dtype=np.uint32)
+            fstR = binChunk["RETURN_NUMBER"] == 1
+            if np.sum(fstR) > 0:
+                (row_1st, col_1st) = gridding_methods.xyToRowCol(
+                    binChunk["X"][fstR], binChunk["Y"][fstR],
+                    xst_bin, yst_bin, cmdargs.psize)
+                gridding_methods.fstR_density(
+                    row_1st, col_1st,
+                    binChunk["X"][fstR], binChunk["Y"][fstR],
+                    density)
+                ptDenTile[binSlice] = density
+            ############################
+            # run percentiles
+            (percentile_arr, nRows_pct) = (
+                gridding_methods.doHeightPercentileOutputs_idx(
+                    binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
+                    binSize, heightAboveGround, cmdargs.ptile_s,
+                    pptiles=percentiles, nullVal=nullVal))
+            xst_pct = int(int((binCol - 1) * binSize) / cmdargs.ptile_s)
+            yst_pct = int(int((numBinRows - binRow) * binSize) / cmdargs.ptile_s)
+            pctTile[
+                :,
+                yst_pct : (yst_pct + nRows_pct),
+                xst_pct : (xst_pct + nRows_pct),
+            ] = percentile_arr
+
+            ############################
+            # run FPC
+            xst_fpc = int(int((binCol - 1) * binSize) / cmdargs.fpc_psize)
+            yst_fpc = int(int((numBinRows - binRow) * binSize) / cmdargs.fpc_psize)
+            nRows_fpc = int(np.ceil(binSize / cmdargs.fpc_psize))
+            # nCols_fpc = int(np.ceil(binSize / cmdargs.fpc_psize))
+
+            flightlines = fpc_method.check_pts_pulses(binChunk)
+            canopyThreshold = 1.7
+            hag = heightAboveGround
+
+            fpc = fpc_method.doFPC(xst_bin, yst_bin, binChunk,
+                flightlines, hag, cmdargs.fpc_psize,
+                binSize, cmdargs.split_fpc, canopyThreshold)
+            fpcTile[
+                yst_fpc : (yst_fpc + nRows_fpc),
+                xst_fpc : (xst_fpc + nRows_fpc),
+            ] = fpc
+            ############################
+            del chunk, binChunk, flightlines, hag
+
+
+def writeOutputRasters(cmdargs, outfnames, easting, northing, nullVal, infileFull,
+        demTile, csmTile, chmTile, maxhTile, intensTile, ptDenTile, grTile,
+        non_grTile, pctTile, fpcTile):
+    """
+    Write the tile arrays into their respoective output raster files.
+
+    Parameters:
+      cmdargs (argparse.Namespace): Command line arguments
+      outfnames (dict): Output file names for tile, keyed by product name
+      easting, northing (float): Easting and Northing (metres) of top-left
+                                 corner of tile
+      nullVal (float): Null value for most rasters
+      demTile : Output array for ground DEM
+      csmTile : Output array for Canopy Surface Model
+      chmTile : Output array for Canopy Height Model
+      maxhTile : Output array for max height
+      intensTile : Output array for intensity
+      ptDenTile : Output array for per-pixel point density
+      grTile : Output array for ?????
+      non_grTile : Output array for ?????
+      pcntTile : Output array for vegetation height percentiles
+      fpcTile : Output array for Foliage Projective Cover
+
+    """
+    rw_image_methods.writeImage(np.round(demTile, 3), outfnames["dem"],
+        tlx=easting, tly=northing, binsize=cmdargs.psize, epsg=cmdargs.epsg,
+        nullVal=nullVal, parent_file=infileFull, driverName=cmdargs.driver)
+    rw_image_methods.writeImage(np.round(csmTile, 3), outfnames["csm"],
+        tlx=easting, tly=northing, binsize=cmdargs.psize, epsg=cmdargs.epsg,
+        nullVal=nullVal, parent_file=infileFull, driverName=cmdargs.driver)
+
+    # interpolating over buildings can be a problem - msk out affected pixels here
+    multi = cmdargs.psize / cmdargs.chm_psize
+    veg_msk = np.logical_or(non_grTile == const.PTCLASS_BUILDING,
+                            non_grTile == const.PTCLASS_WATER)
+    veg_msk = ndimage.zoom(veg_msk, multi, order=0)
+    struct2 = ndimage.generate_binary_structure(2, 2)
+    veg_msk = ndimage.binary_dilation(veg_msk, structure=struct2)
+    veg_msk = ndimage.binary_dilation(veg_msk, structure=struct2)
+    chmTile[veg_msk] = 0
+
+    masked_array = np.ma.masked_equal(chmTile, 0)
+    chmTile = ndimage.median_filter(masked_array, size=3)  # median filter ignoring zeros
+    chmTile[chmTile < 0.5] = nullVal
+    rw_image_methods.writeImage(np.round(chmTile, 3), outfnames["chm"],
+        tlx=easting, tly=northing, binsize=cmdargs.chm_psize, epsg=cmdargs.epsg,
+        nullVal=nullVal, parent_file=infileFull, driverName=cmdargs.driver)
+
+    rw_image_methods.writeImage(np.round(maxhTile, 3), outfnames["maxH"],
+        tlx=easting, tly=northing, binsize=cmdargs.psize, epsg=cmdargs.epsg,
+        nullVal=nullVal, parent_file=infileFull, driverName=cmdargs.driver)
+    rw_image_methods.writeImage(np.round(intensTile, 4), outfnames["intens"],
+        tlx=easting, tly=northing, binsize=cmdargs.psize, epsg=cmdargs.epsg,
+        nullVal=nullVal, parent_file=infileFull, driverName=cmdargs.driver)
+    rw_image_methods.writeImage(grTile, outfnames["grdR"], tlx=easting, tly=northing,
+        binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=rtnClassNull,
+        parent_file=infileFull, overviewResampling="MODE", driverName=cmdargs.driver)
+    rw_image_methods.writeImage(non_grTile, outfnames["NonGrdCodes"],
+        tlx=easting, tly=northing, binsize=cmdargs.psize, epsg=cmdargs.epsg,
+        nullVal=rtnClassNull, parent_file=infileFull, overviewResampling="MODE",
+        driverName=cmdargs.driver)
+    rw_image_methods.writeImage(ptDenTile, outfnames["fstDens"],
+        tlx=easting, tly=northing, binsize=cmdargs.psize, epsg=cmdargs.epsg,
+        nullVal=0, parent_file=infileFull, driverName=cmdargs.driver)
+
+    # Each of the vegetation percentile layers
+    for idx, pp in enumerate(percentiles):
+        layer = pctTile[idx, :, :]
+        productName = f"percentile{pp}"
+        rw_image_methods.writeImage(
+            np.round(layer, 3), outfnames[productName], tlx=easting, tly=northing,
+            binsize=cmdargs.ptile_s, epsg=cmdargs.epsg, nullVal=nullVal,
+            parent_file=infileFull, driverName=cmdargs.driver)
+
+    rw_image_methods.writeImage(np.rint(fpcTile).astype(np.uint8), outfnames["fpc"],
+        tlx=easting, tly=northing, binsize=cmdargs.fpc_psize, epsg=cmdargs.epsg,
+        nullVal=rtnClassNull, parent_file=infileFull, driverName=cmdargs.driver)
+
+    # Apply colour tables
+    fpcClrTbl = fpc_method.makeFPCcolorTable()
+    rw_image_methods.setColorTable(outfnames["fpc"], fpcClrTbl)
+    nonGrdClrTbl = makeNonGroundClrTbl()
+    rw_image_methods.setColorTable(outfnames["NonGrdCodes"], nonGrdClrTbl)
+
+    logger.info(f"Tiles written to file {infileFull}")
+
+    # Create the hillshade layer, using GDAL algorithm
+    demOptions = gdal.DEMProcessingOptions(computeEdges=True)
+    gdal.DEMProcessing(outfnames["demHS"], outfnames["dem"], "hillshade",
+        options=demOptions)
 
 
 ###################################################################################################
