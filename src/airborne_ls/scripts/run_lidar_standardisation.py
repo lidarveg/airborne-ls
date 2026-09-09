@@ -131,6 +131,9 @@ def getCmdargs(inputargs):
     if len(cmdargs.project) != 6:
         raise ValueError("Project name must be exactly 6 characters.")
 
+    if cmdargs.indir == cmdargs.outdir:
+        raise ValueError("--outdir cannot be the same as --indir")
+
     # Validate output directory
     if not Path(cmdargs.outdir).exists():
         raise ValueError(f"Output directory '{cmdargs.outdir}' does not exist")
@@ -146,7 +149,7 @@ def getCmdargs(inputargs):
 
     lasVersNum = tuple([int(i) for i in cmdargs.minlasversion.split('.')])
     if len(lasVersNum) > 2:
-        msg = f"LAS version {cmdargs.lasversion} has too many components ({len(lasVersNum)})"
+        msg = f"LAS version {cmdargs.minlasversion} has too many components ({len(lasVersNum)})"
         raise ValueError(msg)
     cmdargs.minlasversion = laspy.header.Version(*lasVersNum)
 
