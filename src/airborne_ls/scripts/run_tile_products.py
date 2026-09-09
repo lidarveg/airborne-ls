@@ -79,7 +79,9 @@ def getCmdargs(inputargs):
         help="Directory containing standardised, fully indexed LAZ files to process")
     parser.add_argument("--infile",
         help="Name of a single input standardised LAZ file to process")
-    # Will add a --skipexisting later ......
+    parser.add_argument("--skipexisting", default=False, action="store_true",
+        help=("Skip input file if ALL its outputs already exist. Default will re-create " +
+              "all output files, regardless of existence"))
     parser.add_argument("--tile_s", type=float, help="XY dimensions of LAS tile in metres.")
     parser.add_argument("--epsg", type=int,
         help="EPSG number of map projection used in the input LAZ files")
@@ -169,72 +171,74 @@ def run_tile_products(cmdargs):
             chm_psize=cmdargs.chm_psize,
             pptiles=percentiles,
         )
-        logger.info(f"LAZ file and header read in for {infileFull}")
+        allExist = checkOutfilesExist(outfnames)
+        if cmdargs.skipexisting and allExist:
+            print(f"Skipping {infileFull}, as its outputs all exist")
+        else:
+            # arrays to store processing segments of tiles
+            tileSizePix = int(cmdargs.tile_s / cmdargs.psize)
+            tileShape = (tileSizePix, tileSizePix)
+            tileSizeChmPix = int(cmdargs.tile_s / cmdargs.chm_psize)
+            tileChmShape = (tileSizeChmPix, tileSizeChmPix)
+            tileSizeFpcPix = int(cmdargs.tile_s / cmdargs.fpc_psize)
+            tileFpcShape = (tileSizeFpcPix, tileSizeFpcPix)
+            tileSizePctPix = int(cmdargs.tile_s / cmdargs.ptile_s)
+            tilePctShape = (len(percentiles), tileSizePctPix, tileSizePctPix)
 
-        # arrays to store processing segments of tiles
-        tileSizePix = int(cmdargs.tile_s / cmdargs.psize)
-        tileShape = (tileSizePix, tileSizePix)
-        tileSizeChmPix = int(cmdargs.tile_s / cmdargs.chm_psize)
-        tileChmShape = (tileSizeChmPix, tileSizeChmPix)
-        tileSizeFpcPix = int(cmdargs.tile_s / cmdargs.fpc_psize)
-        tileFpcShape = (tileSizeFpcPix, tileSizeFpcPix)
-        tileSizePctPix = int(cmdargs.tile_s / cmdargs.ptile_s)
-        tilePctShape = (len(percentiles), tileSizePctPix, tileSizePctPix)
+            demTile = np.full(tileShape, nullVal, dtype=np.float32)
+            csmTile = np.full(tileShape, nullVal, dtype=np.float32)
+            chmTile = np.zeros(tileChmShape, dtype=np.float32)
+            maxhTile = np.full(tileShape, nullVal, dtype=np.float32)
+            intensTile = np.full(tileShape, nullVal, dtype=np.float32)
+            ptDenTile = np.zeros(tileShape, dtype=np.uint16)
+            grTile = np.full(tileShape, 254, dtype=np.uint8)
+            non_grTile = np.full(tileShape, 254, dtype=np.uint8)
+            pctTile = np.full(tilePctShape, nullVal, dtype=np.float32)
+            fpcTile = np.full(tileFpcShape, rtnClassNull, dtype=np.float32)
 
-        demTile = np.full(tileShape, nullVal, dtype=np.float32)
-        csmTile = np.full(tileShape, nullVal, dtype=np.float32)
-        chmTile = np.zeros(tileChmShape, dtype=np.float32)
-        maxhTile = np.full(tileShape, nullVal, dtype=np.float32)
-        intensTile = np.full(tileShape, nullVal, dtype=np.float32)
-        ptDenTile = np.zeros(tileShape, dtype=np.uint16)
-        grTile = np.full(tileShape, 254, dtype=np.uint8)
-        non_grTile = np.full(tileShape, 254, dtype=np.uint8)
-        pctTile = np.full(tilePctShape, nullVal, dtype=np.float32)
-        fpcTile = np.full(tileFpcShape, rtnClassNull, dtype=np.float32)
+            # read in point data for the tile
+            # allDataByBin stores the point data in chunks/bins for rapid access
+            (allDataByBin, northing, easting, numBinRows) = lazfile_rw.bin_data(
+                infileFull, cmdargs.tile_s, nbins)
+            numBinCols = numBinRows
 
-        # read in point data for the tile
-        # allDataByBin stores the point data in chunks/bins for rapid access
-        (allDataByBin, northing, easting, numBinRows) = lazfile_rw.bin_data(
-            infileFull, cmdargs.tile_s, nbins)
-        numBinCols = numBinRows
+            logger.info(f"Indexed LAZ FILE read in for {infileFull}")
 
-        logger.info(f"Indexed LAZ FILE read in for {infileFull}")
+            # The number of pixel rows/cols for the standard pixel size
+            nRowsPerBin = int(np.ceil(binSize / cmdargs.psize))
+            nColsPerBin = int(np.ceil(binSize / cmdargs.psize))
 
-        # The number of pixel rows/cols for the standard pixel size
-        nRowsPerBin = int(np.ceil(binSize / cmdargs.psize))
-        nColsPerBin = int(np.ceil(binSize / cmdargs.psize))
+            for binRow in range(1, numBinRows + 1):
+                for binCol in range(1, numBinCols + 1):
+                    processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8,
+                        easting, northing, nRowsPerBin, nColsPerBin, nullVal, numBinRows,
+                        demTile, csmTile, chmTile, maxhTile, intensTile, ptDenTile, grTile,
+                        non_grTile, pctTile, fpcTile)
 
-        for binRow in range(1, numBinRows + 1):
-            for binCol in range(1, numBinCols + 1):
-                processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8,
-                    easting, northing, nRowsPerBin, nColsPerBin, nullVal, numBinRows,
-                    demTile, csmTile, chmTile, maxhTile, intensTile, ptDenTile, grTile,
-                    non_grTile, pctTile, fpcTile)
+            del allDataByBin
 
-        del allDataByBin
+            writeOutputRasters(cmdargs, outfnames, easting, northing, nullVal, infileFull,
+                demTile, csmTile, chmTile, maxhTile, intensTile, ptDenTile, grTile,
+                non_grTile, pctTile, fpcTile)
 
-        writeOutputRasters(cmdargs, outfnames, easting, northing, nullVal, infileFull,
-            demTile, csmTile, chmTile, maxhTile, intensTile, ptDenTile, grTile,
-            non_grTile, pctTile, fpcTile)
+            # calculate and write out to a temporary file return,pulse,area stats while
+            # data held in memory
+            with laspy.open(infileFull) as f:
+                nReturns = f.header.point_count
+            dem_area = np.count_nonzero(demTile != nullVal)
+            nPulses = np.sum(ptDenTile)
 
-        # calculate and write out to a temporary file return,pulse,area stats while
-        # data held in memory
-        with laspy.open(infileFull) as f:
-            nReturns = f.header.point_count
-        dem_area = np.count_nonzero(demTile != nullVal)
-        nPulses = np.sum(ptDenTile)
-
-        outfile = Path(
-            str(outfnames["dem"]).replace(
-                Path(outfnames["dem"]).suffix, "_tempStats.txt"
+            outfile = Path(
+                str(outfnames["dem"]).replace(
+                    Path(outfnames["dem"]).suffix, "_tempStats.txt"
+                )
             )
-        )
 
-        with open(outfile, "w") as fout:
-            fout.write(f"fname = {infile}\n")
-            fout.write(f"nPulses = {nPulses}\n")
-            fout.write(f"nReturns = {nReturns}\n")
-            fout.write(f"DEM area (pixels) = {dem_area}\n")
+            with open(outfile, "w") as fout:
+                fout.write(f"fname = {infile}\n")
+                fout.write(f"nPulses = {nPulses}\n")
+                fout.write(f"nReturns = {nReturns}\n")
+                fout.write(f"DEM area (pixels) = {dem_area}\n")
 
 
 def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, easting, northing,
@@ -694,6 +698,24 @@ def makeNonGroundClrTbl():
     clrTblArr[254] = (101, 67, 33)  # brown for background
 
     return clrTblArr
+
+
+def checkOutfilesExist(outfnames):
+    """
+    Check whether all of the output files already exist
+
+    Parameters:
+      outfnames (dict): Dictionary of all output file names, keyed by product name
+
+    Returns:
+      allExist (bool): True if all of the output files exist, False otherwise
+    """
+    allExist = True
+    for filename in outfnames.values():
+        if not os.path.exists(filename):
+            allExist = False
+
+    return allExist
 
 
 ###############################################################################################
