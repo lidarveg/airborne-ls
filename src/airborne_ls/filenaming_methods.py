@@ -275,17 +275,17 @@ def neighbourTileWhere(where, xOffset, yOffset):
     return newWhere
 
 
-def get_outfnames(outputBasename, psize=0.5, ptile_s=5, fpc_psize=10, chm_psize=0.2,
+def get_outfnames(outputBasename, pixsize=0.5, pcntile_pixsize=5, fpc_pixsize=10, chm_pixsize=0.2,
         pptiles=(1, 5, 25, 50, 75, 95, 99), driverName='GTiff'):
     """
     Generate filenames for individually processed tiles and intermediate products.
 
     Parameters:
         outputBasename (str): Base name for the output files.
-        psize (float): Resolution for DEM, maxH, and other products in metres (default: 0.5).
-        ptile_s (float): Resolution for percentile tiles in metres (default: 5).
-        fpc_psize (float): Resolution for FPC in metres (default: 10).
-        chm_psize (float): Resolution for CHM in metres (default: 0.2).
+        pixsize (float): Resolution for DEM, maxH, and other products in metres (default: 0.5).
+        pcntile_pixsize (float): Resolution for percentile tiles in metres (default: 5).
+        fpc_pixsize (float): Resolution for FPC in metres (default: 10).
+        chm_pixsize (float): Resolution for CHM in metres (default: 0.2).
         pptiles (list[int]): List of percentiles to generate filenames for
                              (default: (1, 5, 25, 50, 75, 95, 99)).
 
@@ -293,10 +293,10 @@ def get_outfnames(outputBasename, psize=0.5, ptile_s=5, fpc_psize=10, chm_psize=
         dict: A dictionary where keys are product names and
               values are their corresponding filenames.
     """
-    stdRes = resolutionStrFromMetres(psize)
-    fpcRes = resolutionStrFromMetres(fpc_psize)
-    chmRes = resolutionStrFromMetres(chm_psize)
-    pcntileRes = resolutionStrFromMetres(ptile_s)
+    stdRes = resolutionStrFromMetres(pixsize)
+    fpcRes = resolutionStrFromMetres(fpc_pixsize)
+    chmRes = resolutionStrFromMetres(chm_pixsize)
+    pcntileRes = resolutionStrFromMetres(pcntile_pixsize)
 
     fnames = {}
 

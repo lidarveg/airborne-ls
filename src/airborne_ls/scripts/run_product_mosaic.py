@@ -3,9 +3,9 @@
 """
 Purpose: Generate the product mosaics from individually processed LiDAR tiles.
 
-example: uv run python scripts/run_product_mosaic.py \
-    --indir lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/ \
-    --laz_flist  laz_flist --tile_s 1000. --psize 0.5 --chm_psize 0.2
+example: run_product_mosaic \
+            --indir lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/ \
+            --pixsize 0.5 --chm_pixsize 0.2
 
 """
 
@@ -45,22 +45,24 @@ def getCmdargs(inputargs):
         help="Top-level directory containing input tiles.")
     parser.add_argument("--outdir",
         help="Directory to write mosaics. Default is same as indir")
-    parser.add_argument("--tile_s", type=float, required=True,
-        help="XY dimensions of LAS tile (metres).")
-    parser.add_argument("--psize", default=0.5, type=float,
-        help=("Pixel size of gridded DEM, Intensity, and maxH output layers (metres). " +
-              "Default: %(default)s."))
-    parser.add_argument("--ptile_s", default=5, type=float,
-        help="Pixel size of percentile output layers (metres). Default: %(default)s.")
-    parser.add_argument("--fpc_psize", default=10.0, type=float,
-        help="Pixel size of the FPC layer (metres). Default: %(default)s.")
-    parser.add_argument("--chm_psize", default=None, type=float,
-        help="Optional: value estimated using pulse density (metres).")
+    pixsizeGrp = parser.add_argument_group("Pixel sizes, used for names of input " +
+        "and output files")
+    pixsizeGrp.add_argument("--pixsize", default=0.5, type=float,
+        help=("Pixel size of gridded DEM, Intensity, and maxH output layers (metres) " +
+              "(default=%(default)s)"))
+    pixsizeGrp.add_argument("--pcntile_pixsize", default=5.0, type=float,
+        help="Pixel size of percentile output layers (metres) (default=%(default)s)")
+    pixsizeGrp.add_argument("--fpc_pixsize", default=10.0, type=float,
+        help="Pixel size of the FPC layer (metres) (default=%(default)s)")
+    pixsizeGrp.add_argument("--chm_pixsize", default=0.2, type=float,
+        help="Pixel size of the CHM layer (metres) (default=%(default)s)")
     parser.add_argument("--stagecode",
-        help="Three-letter stage code to run. If blank, run all stage codes.")
+        help="Three-letter stage code to run. Default will run all stage codes.")
     parser.add_argument("--driver", default='GTiff',
-        help=("GDAL driver for image format (default=%(default)s). If 'GTiff', then " +
-              "use the COG variant for output, otherwise use as given"))
+        help=("GDAL driver for image format (default=%(default)s). Used to identify " +
+              "suffix for input tile files, and for the output mosaic files. " +
+              "If 'GTiff', then it will use the COG variant for output, " +
+              "otherwise used as given"))
 
     cmdargs = parser.parse_args(inputargs)
 
@@ -103,13 +105,13 @@ def runMerge(cmdargs):
             productFile = os.path.join(subdir, productFile)
 
             # Choose resolution based on productName
-            res = cmdargs.psize
+            res = cmdargs.pixsize
             if productName == "fpc":
-                res = cmdargs.fpc_psize
+                res = cmdargs.fpc_pixsize
             elif productName == "chm":
-                res = cmdargs.chm_psize
+                res = cmdargs.chm_pixsize
             elif productName.startswith('percentile'):
-                res = cmdargs.ptile_s
+                res = cmdargs.pcntile_pixsize
             resStr = filenaming_methods.resolutionStrFromMetres(res)
             productFile = qvf.setoptionfield(productFile, 'r', resStr)
 
