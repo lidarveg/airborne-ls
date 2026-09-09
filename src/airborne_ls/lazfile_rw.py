@@ -110,8 +110,8 @@ def standardise_lasf(what, when, utmZone, stageCode, projectName, outdr,
         data (laspy.LasData): LAS/LAZ data to process.
         easting (float): Easting coordinate of top-left corner of the tile.
         northing (float): Northing coordinate of top-left corner of the tile.
-        tile_s (float): Size of the input tile (metres).
-        out_tile_s (float): Size of the output tile (metres).
+        tile_s (int): Size of the input tile (metres).
+        out_tile_s (int): Size of the output tile (metres).
         binSize (float): Bin size for indexing (metres).
         filename_Parent (str): Parent filename for metadata tracking.
         classesToExclude (list): List of integer point classification values to exclude

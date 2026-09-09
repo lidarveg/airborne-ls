@@ -20,9 +20,9 @@
 
 example:
 
-uv run python scripts/run_tile_products.py \
+run_tile_products \
     --indir lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/ --epsg 28356 \
-    --laz_flist laz_flist --tile_s 1000. --psize 0.5 --chm_psize 0.2
+    --tilesize 1000 --pixsize 0.5 --chm_pixsize 0.2
 
 """
 
@@ -82,20 +82,22 @@ def getCmdargs(inputargs):
     parser.add_argument("--skipexisting", default=False, action="store_true",
         help=("Skip input file if ALL its outputs already exist. Default will re-create " +
               "all output files, regardless of existence"))
-    parser.add_argument("--tile_s", type=float, help="XY dimensions of LAS tile in metres.")
+    parser.add_argument("--tilesize", type=int, required=True,
+        help="XY dimensions of LAS tile in metres.")
     parser.add_argument("--epsg", type=int,
         help="EPSG number of map projection used in the input LAZ files")
 
     # Output resolutions
-    parser.add_argument("--psize", default=0.5, type=float,
-        help=("Pixel size of gridded DEM, Intensity, and maxH output layers (metres). " +
-              "Default: %(default)s."))
-    parser.add_argument("--ptile_s", default=5, type=float,
-        help="Pixel size of percentile output layers (metres). Default: %(default)s.")
-    parser.add_argument("--fpc_psize", default=10.0, type=float,
-        help="Pixel size of the FPC layer (metres). Default: %(default)s.")
-    parser.add_argument("--chm_psize", default=0.2, type=float,
-        help="Pixel size of the CHM layer (metres). Default: %(default)s.")
+    pixsizeGrp = parser.add_argument_group("Pixel sizes")
+    pixsizeGrp.add_argument("--pixsize", default=0.5, type=float,
+        help=("Pixel size of gridded DEM, Intensity, and maxH output layers (metres) " +
+              "(default=%(default)s)"))
+    pixsizeGrp.add_argument("--pcntile_pixsize", default=5.0, type=float,
+        help="Pixel size of percentile output layers (metres) (default=%(default)s)")
+    pixsizeGrp.add_argument("--fpc_pixsize", default=10.0, type=float,
+        help="Pixel size of the FPC layer (metres) (default=%(default)s)")
+    pixsizeGrp.add_argument("--chm_pixsize", default=0.2, type=float,
+        help="Pixel size of the CHM layer (metres) (default=%(default)s)")
 
     # File processing options
     parser.add_argument("--split_fpc", default=False, action=argparse.BooleanOptionalAction,
@@ -120,9 +122,6 @@ def getCmdargs(inputargs):
     if cmdargs.epsg is None:
         raise ValueError("EPSG code must be supplied.")
 
-    if cmdargs.tile_s is None:
-        raise ValueError("No cmdargs.tile_s supplied.")
-
     return cmdargs
 
 
@@ -134,7 +133,7 @@ def run_tile_products(cmdargs):
         cmdargs (Namespace): Parsed command-line arguments containing processing parameters.
     """
     # Check if the supplied pixel sizes are divisible
-    check_divisible([cmdargs.psize, cmdargs.ptile_s, cmdargs.fpc_psize])
+    check_divisible([cmdargs.pixsize, cmdargs.pcntile_pixsize, cmdargs.fpc_pixsize])
 
     if cmdargs.infile is not None:
         infilelist = [cmdargs.infile]
@@ -148,7 +147,7 @@ def run_tile_products(cmdargs):
     )
 
     # Read the first file to get bin size and number of bins
-    (binSize, nbins, _, _) = lazfile_rw.read_laz_index(infilelist[0], cmdargs.tile_s)
+    (binSize, nbins, _, _) = lazfile_rw.read_laz_index(infilelist[0], cmdargs.tilesize)
 
     logger.info(f"binSize = {binSize} and nbins = {nbins} for {infilelist[0]}")
 
@@ -165,10 +164,10 @@ def run_tile_products(cmdargs):
             Path.mkdir(outputDir)
         outfnames = filenaming_methods.get_outfnames(
             outputBasename,
-            psize=cmdargs.psize,
-            ptile_s=cmdargs.ptile_s,
-            fpc_psize=cmdargs.fpc_psize,
-            chm_psize=cmdargs.chm_psize,
+            pixsize=cmdargs.pixsize,
+            pcntile_pixsize=cmdargs.pcntile_pixsize,
+            fpc_pixsize=cmdargs.fpc_pixsize,
+            chm_pixsize=cmdargs.chm_pixsize,
             pptiles=percentiles,
         )
         allExist = checkOutfilesExist(outfnames)
@@ -176,13 +175,13 @@ def run_tile_products(cmdargs):
             print(f"Skipping {infileFull}, as its outputs all exist")
         else:
             # arrays to store processing segments of tiles
-            tileSizePix = int(cmdargs.tile_s / cmdargs.psize)
+            tileSizePix = int(cmdargs.tilesize / cmdargs.pixsize)
             tileShape = (tileSizePix, tileSizePix)
-            tileSizeChmPix = int(cmdargs.tile_s / cmdargs.chm_psize)
+            tileSizeChmPix = int(cmdargs.tilesize / cmdargs.chm_pixsize)
             tileChmShape = (tileSizeChmPix, tileSizeChmPix)
-            tileSizeFpcPix = int(cmdargs.tile_s / cmdargs.fpc_psize)
+            tileSizeFpcPix = int(cmdargs.tilesize / cmdargs.fpc_pixsize)
             tileFpcShape = (tileSizeFpcPix, tileSizeFpcPix)
-            tileSizePctPix = int(cmdargs.tile_s / cmdargs.ptile_s)
+            tileSizePctPix = int(cmdargs.tilesize / cmdargs.pcntile_pixsize)
             tilePctShape = (len(percentiles), tileSizePctPix, tileSizePctPix)
 
             demTile = np.full(tileShape, nullVal, dtype=np.float32)
@@ -199,14 +198,14 @@ def run_tile_products(cmdargs):
             # read in point data for the tile
             # allDataByBin stores the point data in chunks/bins for rapid access
             (allDataByBin, northing, easting, numBinRows) = lazfile_rw.bin_data(
-                infileFull, cmdargs.tile_s, nbins)
+                infileFull, cmdargs.tilesize, nbins)
             numBinCols = numBinRows
 
             logger.info(f"Indexed LAZ FILE read in for {infileFull}")
 
             # The number of pixel rows/cols for the standard pixel size
-            nRowsPerBin = int(np.ceil(binSize / cmdargs.psize))
-            nColsPerBin = int(np.ceil(binSize / cmdargs.psize))
+            nRowsPerBin = int(np.ceil(binSize / cmdargs.pixsize))
+            nColsPerBin = int(np.ceil(binSize / cmdargs.pixsize))
 
             for binRow in range(1, numBinRows + 1):
                 for binCol in range(1, numBinCols + 1):
@@ -276,7 +275,7 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
     """
     binKey = f"row_{binRow}_col_{binCol}"
     binTopLeftX = easting + binSize * (binCol - 1)
-    binTopLeftY = northing - cmdargs.tile_s + binSize * binRow
+    binTopLeftY = northing - cmdargs.tilesize + binSize * binRow
     binChunk = np.copy(allDataByBin[binKey])  # reset as we don't need buffer
     chunk = np.copy(allDataByBin[binKey])
     if len(chunk) > 10:
@@ -293,8 +292,8 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
         if np.sum(grdhits) > 10:
             # Set up a slice object for the part of the main tile arrays
             # covering the current bin. Applies only to arrays of tileShape
-            xst = int(int((binCol - 1) * binSize) / cmdargs.psize)
-            yst = int(int((numBinRows - binRow) * binSize) / cmdargs.psize)
+            xst = int(int((binCol - 1) * binSize) / cmdargs.pixsize)
+            yst = int(int((numBinRows - binRow) * binSize) / cmdargs.pixsize)
             binSlice = (slice(yst, (yst + nRowsPerBin)), slice(xst, (xst + nColsPerBin)))
 
             xst_bin = easting + int((binCol - 1) * binSize)
@@ -303,13 +302,13 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
                 dem = gridding_methods.makeDemTile(
                     chunk["X"][grdhits], chunk["Y"][grdhits],
                     chunk["Z"][grdhits], xst_bin, yst_bin, binSize,
-                    cmdargs.psize, nullVal=nullVal)
+                    cmdargs.pixsize, nullVal=nullVal)
                 demTile[binSlice] = dem
 
             # Get pixel coords of each point return, within the array for the bin
             (row, col) = gridding_methods.xyToRowCol(
                 binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
-                cmdargs.psize)
+                cmdargs.pixsize)
 
             # Count return classes per-pixel
             classCountsShape = (CLASSCOUNTS_MAXCLASS + 1, nRowsPerBin, nColsPerBin)
@@ -321,11 +320,11 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
             #######################################################################
             # run csm
             xValsA, yValsA, zValsA = gridding_methods.maxH_xyzLocs(
-                chunk["X"], chunk["Y"], chunk["Z"], cmdargs.psize
+                chunk["X"], chunk["Y"], chunk["Z"], cmdargs.pixsize
             )
             csm = gridding_methods.makeDemTile(
                 xValsA, yValsA, zValsA, xst_bin, yst_bin,
-                binSize, cmdargs.psize, nullVal=nullVal)
+                binSize, cmdargs.pixsize, nullVal=nullVal)
             csm = csm - dem
             csm[dem == nullVal] = nullVal
             csmTile[binSlice] = csm
@@ -379,14 +378,14 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
             if number_veg_rets > 10:
                 (row_chm, col_chm) = gridding_methods.xyToRowCol(
                     binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
-                    cmdargs.chm_psize)
-                nRows_chm = int(np.ceil(binSize / cmdargs.chm_psize))
-                nCols_chm = int(np.ceil(binSize / cmdargs.chm_psize))
+                    cmdargs.chm_pixsize)
+                nRows_chm = int(np.ceil(binSize / cmdargs.chm_pixsize))
+                nCols_chm = int(np.ceil(binSize / cmdargs.chm_pixsize))
                 xst_chm = int(
-                    int((binCol - 1) * binSize) / cmdargs.chm_psize
+                    int((binCol - 1) * binSize) / cmdargs.chm_pixsize
                 )
                 yst_chm = int(
-                    int((numBinRows - binRow) * binSize) / cmdargs.chm_psize
+                    int((numBinRows - binRow) * binSize) / cmdargs.chm_pixsize
                 )
 
                 maxH_hag = np.full((nRows_chm, nCols_chm), nullVal,
@@ -406,7 +405,7 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
                 if np.sum(vals) > 5:
                     chmVeg = gridding_methods.chm_alg(
                         chunk[vals], chunk_hag[vals], maxH_hag,
-                        cmdargs.chm_psize, xst_bin, yst_bin,
+                        cmdargs.chm_pixsize, xst_bin, yst_bin,
                         binSize, nRows_chm, nCols_chm, nullVal)
                     chmTile[
                         yst_chm : (yst_chm + nRows_chm),
@@ -420,7 +419,7 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
             if np.sum(fstR) > 0:
                 (row_1st, col_1st) = gridding_methods.xyToRowCol(
                     binChunk["X"][fstR], binChunk["Y"][fstR],
-                    xst_bin, yst_bin, cmdargs.psize)
+                    xst_bin, yst_bin, cmdargs.pixsize)
                 gridding_methods.fstR_density(
                     row_1st, col_1st,
                     binChunk["X"][fstR], binChunk["Y"][fstR],
@@ -431,10 +430,10 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
             (percentile_arr, nRows_pct) = (
                 gridding_methods.doHeightPercentileOutputs_idx(
                     binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
-                    binSize, heightAboveGround, cmdargs.ptile_s,
+                    binSize, heightAboveGround, cmdargs.pcntile_pixsize,
                     pptiles=percentiles, nullVal=nullVal))
-            xst_pct = int(int((binCol - 1) * binSize) / cmdargs.ptile_s)
-            yst_pct = int(int((numBinRows - binRow) * binSize) / cmdargs.ptile_s)
+            xst_pct = int(int((binCol - 1) * binSize) / cmdargs.pcntile_pixsize)
+            yst_pct = int(int((numBinRows - binRow) * binSize) / cmdargs.pcntile_pixsize)
             pctTile[
                 :,
                 yst_pct : (yst_pct + nRows_pct),
@@ -443,17 +442,17 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
 
             ############################
             # run FPC
-            xst_fpc = int(int((binCol - 1) * binSize) / cmdargs.fpc_psize)
-            yst_fpc = int(int((numBinRows - binRow) * binSize) / cmdargs.fpc_psize)
-            nRows_fpc = int(np.ceil(binSize / cmdargs.fpc_psize))
-            # nCols_fpc = int(np.ceil(binSize / cmdargs.fpc_psize))
+            xst_fpc = int(int((binCol - 1) * binSize) / cmdargs.fpc_pixsize)
+            yst_fpc = int(int((numBinRows - binRow) * binSize) / cmdargs.fpc_pixsize)
+            nRows_fpc = int(np.ceil(binSize / cmdargs.fpc_pixsize))
+            # nCols_fpc = int(np.ceil(binSize / cmdargs.fpc_pixsize))
 
             flightlines = fpc_method.check_pts_pulses(binChunk)
             canopyThreshold = 1.7
             hag = heightAboveGround
 
             fpc = fpc_method.doFPC(xst_bin, yst_bin, binChunk,
-                flightlines, hag, cmdargs.fpc_psize,
+                flightlines, hag, cmdargs.fpc_pixsize,
                 binSize, cmdargs.split_fpc, canopyThreshold)
             fpcTile[
                 yst_fpc : (yst_fpc + nRows_fpc),
@@ -488,14 +487,14 @@ def writeOutputRasters(cmdargs, outfnames, easting, northing, nullVal, infileFul
 
     """
     rw_image_methods.writeImage(np.round(demTile, 3), outfnames["dem"],
-        tlx=easting, tly=northing, binsize=cmdargs.psize, epsg=cmdargs.epsg,
+        tlx=easting, tly=northing, binsize=cmdargs.pixsize, epsg=cmdargs.epsg,
         nullVal=nullVal, parent_file=infileFull, driverName=cmdargs.driver)
     rw_image_methods.writeImage(np.round(csmTile, 3), outfnames["csm"],
-        tlx=easting, tly=northing, binsize=cmdargs.psize, epsg=cmdargs.epsg,
+        tlx=easting, tly=northing, binsize=cmdargs.pixsize, epsg=cmdargs.epsg,
         nullVal=nullVal, parent_file=infileFull, driverName=cmdargs.driver)
 
     # interpolating over buildings can be a problem - msk out affected pixels here
-    multi = cmdargs.psize / cmdargs.chm_psize
+    multi = cmdargs.pixsize / cmdargs.chm_pixsize
     veg_msk = np.logical_or(non_grTile == const.PTCLASS_BUILDING,
                             non_grTile == const.PTCLASS_WATER)
     veg_msk = ndimage.zoom(veg_msk, multi, order=0)
@@ -508,24 +507,24 @@ def writeOutputRasters(cmdargs, outfnames, easting, northing, nullVal, infileFul
     chmTile = ndimage.median_filter(masked_array, size=3)  # median filter ignoring zeros
     chmTile[chmTile < 0.5] = nullVal
     rw_image_methods.writeImage(np.round(chmTile, 3), outfnames["chm"],
-        tlx=easting, tly=northing, binsize=cmdargs.chm_psize, epsg=cmdargs.epsg,
+        tlx=easting, tly=northing, binsize=cmdargs.chm_pixsize, epsg=cmdargs.epsg,
         nullVal=nullVal, parent_file=infileFull, driverName=cmdargs.driver)
 
     rw_image_methods.writeImage(np.round(maxhTile, 3), outfnames["maxH"],
-        tlx=easting, tly=northing, binsize=cmdargs.psize, epsg=cmdargs.epsg,
+        tlx=easting, tly=northing, binsize=cmdargs.pixsize, epsg=cmdargs.epsg,
         nullVal=nullVal, parent_file=infileFull, driverName=cmdargs.driver)
     rw_image_methods.writeImage(np.round(intensTile, 4), outfnames["intens"],
-        tlx=easting, tly=northing, binsize=cmdargs.psize, epsg=cmdargs.epsg,
+        tlx=easting, tly=northing, binsize=cmdargs.pixsize, epsg=cmdargs.epsg,
         nullVal=nullVal, parent_file=infileFull, driverName=cmdargs.driver)
     rw_image_methods.writeImage(grTile, outfnames["grdR"], tlx=easting, tly=northing,
-        binsize=cmdargs.psize, epsg=cmdargs.epsg, nullVal=rtnClassNull,
+        binsize=cmdargs.pixsize, epsg=cmdargs.epsg, nullVal=rtnClassNull,
         parent_file=infileFull, overviewResampling="MODE", driverName=cmdargs.driver)
     rw_image_methods.writeImage(non_grTile, outfnames["NonGrdCodes"],
-        tlx=easting, tly=northing, binsize=cmdargs.psize, epsg=cmdargs.epsg,
+        tlx=easting, tly=northing, binsize=cmdargs.pixsize, epsg=cmdargs.epsg,
         nullVal=rtnClassNull, parent_file=infileFull, overviewResampling="MODE",
         driverName=cmdargs.driver)
     rw_image_methods.writeImage(ptDenTile, outfnames["fstDens"],
-        tlx=easting, tly=northing, binsize=cmdargs.psize, epsg=cmdargs.epsg,
+        tlx=easting, tly=northing, binsize=cmdargs.pixsize, epsg=cmdargs.epsg,
         nullVal=0, parent_file=infileFull, driverName=cmdargs.driver)
 
     # Each of the vegetation percentile layers
@@ -534,11 +533,11 @@ def writeOutputRasters(cmdargs, outfnames, easting, northing, nullVal, infileFul
         productName = f"percentile{pp}"
         rw_image_methods.writeImage(
             np.round(layer, 3), outfnames[productName], tlx=easting, tly=northing,
-            binsize=cmdargs.ptile_s, epsg=cmdargs.epsg, nullVal=nullVal,
+            binsize=cmdargs.pcntile_pixsize, epsg=cmdargs.epsg, nullVal=nullVal,
             parent_file=infileFull, driverName=cmdargs.driver)
 
     rw_image_methods.writeImage(np.rint(fpcTile).astype(np.uint8), outfnames["fpc"],
-        tlx=easting, tly=northing, binsize=cmdargs.fpc_psize, epsg=cmdargs.epsg,
+        tlx=easting, tly=northing, binsize=cmdargs.fpc_pixsize, epsg=cmdargs.epsg,
         nullVal=rtnClassNull, parent_file=infileFull, driverName=cmdargs.driver)
 
     # Apply colour tables
@@ -581,7 +580,7 @@ def check_divisible(psizes):
     Raises:
         SystemExit: If any of the pixel sizes are not divisible by the expected factors.
     """
-    pName = ["psize", "ptile_s", "fpc_psize"]
+    pName = ["pixsize", "pcntile_pixsize", "fpc_pixsize"]
 
     for loc, psize in enumerate(psizes):
         if psize <= 1.0:

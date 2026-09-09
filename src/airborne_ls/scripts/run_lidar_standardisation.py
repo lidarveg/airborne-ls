@@ -16,11 +16,11 @@ point format from header (this should be correct) using the largest few files?
 
 
 example:
-    uv run python scripts/run_lidar_standardisation.py\
+    run_lidar_standardisation \
         --indir lidarveg_testing_data/Brisbane_2014_LGA_sub/ \
-        --outdr lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/\
-        --epsg 28356 --laz_flist laz_flist \
-        --tile_s 1000. --out_tile_s 1000. --ii 'mp' --proj brisba --year 2014 --binSize 50.
+        --outdir lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/\
+        --epsg 28356 --intilesize 1000 --outtilesize 1000 --ii 'mp' \
+        --project brisba --year 2014 --binsize 50.
 
 """
 
@@ -83,9 +83,9 @@ def getCmdargs(inputargs):
               "Newer format input files will preserve their newer version"))
 
     # Tile dimensions
-    parser.add_argument("--tile_s", required=True, type=float,
+    parser.add_argument("--intilesize", required=True, type=int,
         help="Maximum XY dimension of LAS/LAZ file (metres).")
-    parser.add_argument("--out_tile_s", default=1000, type=float,
+    parser.add_argument("--outtilesize", default=1000, type=int,
         help="Equal or smaller maximum XY dimension for output LAS/LAZ files (metres).")
 
     # EPSG and spatial database options
@@ -99,7 +99,7 @@ def getCmdargs(inputargs):
         help="Predefined sensor code; can use uk if unknown")
     parser.add_argument("--pp", type=str, default="dr",
         help="Product type (e.g., 'dr' for discrete return).")
-    parser.add_argument("--proj", required=True,
+    parser.add_argument("--project", required=True,
         help="Six-character project name (e.g., 'brisba').")
     parser.add_argument("--year", type=int, required=True,
         help="Year of data capture (e.g., 2022).")
@@ -112,7 +112,7 @@ def getCmdargs(inputargs):
         help="Maximum acceptable point height value (metres) (default=%(default)s)")
 
     # Tile indexing options
-    parser.add_argument("--binSize", default=50.0, type=float,
+    parser.add_argument("--binsize", default=50.0, type=float,
         help="XY bin size for data indexing (metres).")
 
     # Metadata flags
@@ -128,20 +128,20 @@ def getCmdargs(inputargs):
         raise ValueError(msg)
 
     # Validate project name
-    if len(cmdargs.proj) != 6:
+    if len(cmdargs.project) != 6:
         raise ValueError("Project name must be exactly 6 characters.")
 
     # Validate output directory
     if not Path(cmdargs.outdir).exists():
         raise ValueError(f"Output directory '{cmdargs.outdir}' does not exist")
 
-    if (cmdargs.tile_s % cmdargs.out_tile_s) != 0:
-        msg = (f"Input tile size {cmdargs.tile_s} not divisible by " +
-               f"output tile size {cmdargs.out_tile_s}")
+    if (cmdargs.intilesize % cmdargs.outtilesize) != 0:
+        msg = (f"Input tile size {cmdargs.intilesize} not divisible by " +
+               f"output tile size {cmdargs.outtilesize}")
         raise ValueError(msg)
 
-    if (cmdargs.out_tile_s % cmdargs.binSize) != 0:
-        msg = f"Output tile size {cmdargs.out_tile_s} not divisible by bin size {cmdargs.binSize}"
+    if (cmdargs.outtilesize % cmdargs.binsize) != 0:
+        msg = f"Output tile size {cmdargs.outtilesize} not divisible by bin size {cmdargs.binsize}"
         raise ValueError(msg)
 
     lasVersNum = tuple([int(i) for i in cmdargs.minlasversion.split('.')])
@@ -166,7 +166,7 @@ def run_las_standardisation(cmdargs):
         pattern = f"{cmdargs.indir}/*.la[sz]"
         infileList = sorted(glob.glob(pattern))
 
-    input_tileS = cmdargs.tile_s
+    inTilesize = cmdargs.intilesize
 
     what = f"{cmdargs.ss}{cmdargs.ii}{cmdargs.pp}"
     when = f"{cmdargs.year}"
@@ -186,15 +186,15 @@ def run_las_standardisation(cmdargs):
 
         # Calculate northing and easting of top-left corner of input tile
         northing = int(
-            np.ceil(np.median(data.y[data.y > 0]) / input_tileS) * input_tileS)
+            np.ceil(np.median(data.y[data.y > 0]) / inTilesize) * inTilesize)
         easting = int(
-            np.floor(np.median(data.x[data.x > 0]) / input_tileS) * input_tileS)
+            np.floor(np.median(data.x[data.x > 0]) / inTilesize) * inTilesize)
 
         # Run chunked LAS filtering
         classesToExclude = [int(i) for i in cmdargs.excludeclasses.split(',')]
         _ = lazfile_rw.standardise_lasf(what, when, utmZone, stageCode,
-                cmdargs.proj, cmdargs.outdir, data, easting, northing, input_tileS,
-                cmdargs.out_tile_s, cmdargs.binSize, inLazfile, classesToExclude,
+                cmdargs.project, cmdargs.outdir, data, easting, northing, inTilesize,
+                cmdargs.outtilesize, cmdargs.binsize, inLazfile, classesToExclude,
                 cmdargs.minz, cmdargs.maxz, cmdargs.skipexisting)
 
         del data
