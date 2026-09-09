@@ -45,6 +45,8 @@ def getCmdargs(inputargs):
         help="Top-level directory containing input tiles.")
     parser.add_argument("--outdir",
         help="Directory to write mosaics. Default is same as indir")
+    parser.add_argument("--skipexisting", default=False, action="store_true",
+        help="Skip any output files which already exist (default will over-write)")
     pixsizeGrp = parser.add_argument_group("Pixel sizes, used for names of input " +
         "and output files")
     pixsizeGrp.add_argument("--pixsize", default=0.5, type=float,
@@ -138,27 +140,30 @@ def runMerge(cmdargs):
         outFile = qvf.setwhere(outFile, f"r{projectName}")
         outFile = os.path.join(cmdargs.outdir, outFile)
 
-        vrtFilename = qvf.setsuffix(outFile, 'vrt')
-        gdal.BuildVRT(vrtFilename, tileFileList)
+        if not (cmdargs.skipexisting and os.path.exists(outFile)):
+            vrtFilename = qvf.setsuffix(outFile, 'vrt')
+            gdal.BuildVRT(vrtFilename, tileFileList)
 
-        logger.info(f"Output mosaic name: {outFile}")
-        logger.debug(f"Missing tiles in {outFile} include {missing_tiles}")
+            logger.info(f"Output mosaic name: {outFile}")
+            logger.debug(f"Missing tiles in {outFile} include {missing_tiles}")
 
-        driverName = cmdargs.driver
-        if driverName == "GTiff":
-            driverName = "COG"
-        creationOptions = rw_image_methods.creationOptionsByDriver.get(driverName, [])
-        if qvf.getstagecode(outFile) in ('bb3', 'bb4'):
-            # We do NOT want BILINEAR overview resampling for these stages
-            BILINEAR_RESAMPLING = "RESAMPLING=BILINEAR"
-            if BILINEAR_RESAMPLING in creationOptions:
-                creationOptions = [co for co in creationOptions if co != BILINEAR_RESAMPLING]
-                creationOptions.append('RESAMPLING=MODE')
-        translateOptions = gdal.TranslateOptions(format=driverName,
-            creationOptions=creationOptions)
-        gdal.Translate(outFile, vrtFilename, options=translateOptions)
+            driverName = cmdargs.driver
+            if driverName == "GTiff":
+                driverName = "COG"
+            creationOptions = rw_image_methods.creationOptionsByDriver.get(driverName, [])
+            if qvf.getstagecode(outFile) in ('bb3', 'bb4'):
+                # We do NOT want BILINEAR overview resampling for these stages
+                BILINEAR_RESAMPLING = "RESAMPLING=BILINEAR"
+                if BILINEAR_RESAMPLING in creationOptions:
+                    creationOptions = [co for co in creationOptions if co != BILINEAR_RESAMPLING]
+                    creationOptions.append('RESAMPLING=MODE')
+            translateOptions = gdal.TranslateOptions(format=driverName,
+                creationOptions=creationOptions)
+            gdal.Translate(outFile, vrtFilename, options=translateOptions)
 
-        os.remove(vrtFilename)
+            os.remove(vrtFilename)
+        else:
+            print("Skipping", outFile)
 
 
 def main(args=None):
