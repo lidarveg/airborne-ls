@@ -250,7 +250,7 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
 
     Parameters:
       binRow, binCol (int): The row/col numbers of the bin to process. Note that in the
-                            bin coordinate scheme, row 0 is southern-most.
+                            bin coordinate scheme, row 1 is southern-most.
       cmdargs (argparse.Namespace): The command arguments object
       binSize (float): Size of bin edge (metres)
       neigh8 (array): 1/0/-1 values for offset to 8 neighbouring bins
