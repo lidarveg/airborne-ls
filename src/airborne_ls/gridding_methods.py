@@ -282,6 +282,7 @@ def createHeightAboveGround(nonGround, x, y, z, xVals, yVals, zVals):
     return heightAboveGround
 
 
+@njit
 def maxH_xyzLocs(x, y, z, psize, nullV=-999.0):
     """
     Compute the maximum height (z) and associated x, y locations for each grid cell.
@@ -298,7 +299,10 @@ def maxH_xyzLocs(x, y, z, psize, nullV=-999.0):
             - maxH: Maximum height values.
     """
     # Convert x, y coordinates to row and column indices
-    row, col = xyToRowCol(x, y, np.floor(np.min(x)), np.ceil(np.max(y)), psize)
+    xMin = np.floor(x.min())
+    yMax = np.ceil(y.max())
+    col = (np.floor((x - xMin) / psize)).astype(np.uint32)
+    row = (np.floor((yMax - y) / psize)).astype(np.uint32)
     numPts = len(row)
 
     # Determine the size of the grid
@@ -416,6 +420,7 @@ def doHeightPercentileOutputs(x, y, xMin, yMax, heightAboveGround, tile_s, psize
     return percentile_arr
 
 
+@njit
 def doHeightPercentileOutputs_idx(x, y, xst_bin, yst_bin, binSize, heightAboveGround,
         ptile_s, pptiles=(1, 5, 25, 50, 75, 95, 99), nullVal=-999.0):
     """
@@ -443,7 +448,8 @@ def doHeightPercentileOutputs_idx(x, y, xst_bin, yst_bin, binSize, heightAboveGr
     )
 
     # Convert x, y coordinates to row and column indices
-    row, col = xyToRowCol(x, y, xst_bin, yst_bin, ptile_s)
+    col = (np.floor((x - xst_bin) / ptile_s)).astype(np.uint32)
+    row = (np.floor((yst_bin - y) / ptile_s)).astype(np.uint32)
 
     # Reset the percentile array for the given rows and columns
     percentile_arr[:, row, col] = 0
@@ -459,9 +465,8 @@ def doHeightPercentileOutputs_idx(x, y, xst_bin, yst_bin, binSize, heightAboveGr
             hgtThisCell = hgtThisRow[thisCol]
             hgtThisCell = hgtThisCell[hgtThisCell > 0.5]  # Filter heights > 0.5
 
-            if (
-                len(hgtThisCell) > 3
-            ):  # Only calculate percentiles if there are enough points
+            if len(hgtThisCell) > 3:
+                # Only calculate percentiles if there are enough points
                 for idx, pp in enumerate(pptiles):
                     percentile_arr[idx, r, c] = np.percentile(hgtThisCell, pp)
 
