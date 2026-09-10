@@ -187,6 +187,8 @@ def run_las_standardisation(cmdargs):
         if data.header.version < cmdargs.minlasversion:
             data = laspy.convert(data, file_version=cmdargs.minlasversion)
 
+        checkElevationRange(data, cmdargs.minz, cmdargs.maxz)
+
         # Calculate northing and easting of top-left corner of input tile
         northing = int(
             np.ceil(np.median(data.y[data.y > 0]) / inTilesize) * inTilesize)
@@ -264,6 +266,32 @@ def getStageCode(cmdargs):
     #     - ba1: Geoid heights (AHD)
     #     - ba3: New indexed LAS
     return "ba1"
+
+
+def checkElevationRange(data, minz, maxz):
+    """
+    Check the elevation data against the given acceptable range.
+
+    Print warning messages if points are outside range.
+
+    Parameters:
+      data (laspy.lasdata.LasData): Data from LAS file
+      minz, maxz (float): Accepatble range of elevation data
+    """
+    hdr = data.header
+    zVals = data['Z'] * hdr.z_scale + hdr.z_offset
+    if hdr.z_min < minz:
+        belowMinPts = zVals[zVals < minz]
+        nPts = len(belowMinPts)
+        if nPts > 0:
+            (lower, upper) = (belowMinPts.min(), belowMinPts.max())
+            print(f"  {nPts} points are less than {minz}m (range {lower:.2f} to {upper:.2f})")
+    if hdr.z_max > maxz:
+        aboveMaxPts = zVals[zVals > maxz]
+        nPts = len(aboveMaxPts)
+        if nPts > 0:
+            (lower, upper) = (aboveMaxPts.min(), aboveMaxPts.max())
+            print(f"  {nPts} points are greater than {maxz}m (range {lower:.2f} to {upper:.2f})")
 
 
 def main(args=None):
