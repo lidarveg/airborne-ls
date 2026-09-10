@@ -8,8 +8,8 @@ The initial input is a collection of LAS/LAZ format tiles of Lidar point data, a
 
 ## Installation
 
-See [INSTALLATION.md](INSTALLATION.md) for details on dependencies and installation
+See [doc/INSTALLATION.md](doc/INSTALLATION.md) for details on dependencies and installation
 
 ## Usage
 
-See [USAGE.md](USAGE.md) for details on using the commands.
+See [doc/USAGE.md](doc/USAGE.md) for details on using the commands.
