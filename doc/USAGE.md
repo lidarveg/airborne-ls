@@ -79,11 +79,12 @@ the output files are GeoTiff files with CloudOptimizedTiff (COG) layout (differe
 formats can be used).
 
 Currently there are 17 output products. The file names include a stage code indicating which
-product it is. For example, the DEM is named something like
+product it is. The various fields are separated by underscores. For example, the DEM
+is named something like
 ```
 apmpdr_rbrisba_2014_bb0m6_r50cm.tif
 ```
-The stage code for the DEM is `bb0``. The field tagged with `r` is for the resolution
+The stage code for the DEM is `bb0`. The 5th field, tagged with `r`, is for the resolution
 (i.e. pixel size), in this case 50cm. The project name is `brisba` and the year of acquisition
 is 2014.
 
