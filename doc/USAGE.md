@@ -57,7 +57,7 @@ run_tile_products --indir alsProjectDir-std --epsg 28356 --tilesize 1000 --pixsi
 ## Fill any DEM gaps
 For a range of reasons, the resulting DEM can sometimes contain holes which could not be
 interpolated from the point data. One common reason for this is a water body which extends
-across multiple index bins. A separate program is proved which will interpolate from the
+across multiple index bins. A separate program is provided which will interpolate from the
 surrounding raster elevation values, in order to fill any remaining gaps.
 
 ```bash
