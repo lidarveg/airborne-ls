@@ -85,8 +85,10 @@ def getCmdargs(inputargs):
     # Tile dimensions
     parser.add_argument("--intilesize", required=True, type=int,
         help="Maximum XY dimension of LAS/LAZ file (metres).")
-    parser.add_argument("--outtilesize", default=1000, type=int,
-        help="Equal or smaller maximum XY dimension for output LAS/LAZ files (metres).")
+    parser.add_argument("--outtilesize", type=int,
+        help=("XY dimension for output LAZ files (metres). Must be <= --intilesize, and " +
+              "--intilesize must be whole number multiple of --outtilesize. " +
+              "Default is same as --intilesize"))
 
     # EPSG and spatial database options
     parser.add_argument("--epsg", type=int, required=True,
@@ -137,6 +139,9 @@ def getCmdargs(inputargs):
     # Validate output directory
     if not Path(cmdargs.outdir).exists():
         raise ValueError(f"Output directory '{cmdargs.outdir}' does not exist")
+
+    if cmdargs.outtilesize is None:
+        cmdargs.outtilesize = cmdargs.intilesize
 
     if (cmdargs.intilesize % cmdargs.outtilesize) != 0:
         msg = (f"Input tile size {cmdargs.intilesize} not divisible by " +
