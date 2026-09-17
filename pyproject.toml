@@ -24,6 +24,7 @@ run_lidar_standardisation = "airborne_ls.scripts.run_lidar_standardisation:main"
 run_tile_products = "airborne_ls.scripts.run_tile_products:main"
 run_product_mosaic = "airborne_ls.scripts.run_product_mosaic:main"
 run_dem_gapfill = "airborne_ls.scripts.run_dem_gapfill:main"
+alsv_flowacc = "airborne_ls.scripts.alsv_flowacc:main"
 
 [tool.hatch.version]
 path = "src/airborne_ls/__init__.py"
