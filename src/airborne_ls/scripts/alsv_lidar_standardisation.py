@@ -16,7 +16,7 @@ point format from header (this should be correct) using the largest few files?
 
 
 example:
-    run_lidar_standardisation \
+    alsv_lidar_standardisation \
         --indir lidarveg_testing_data/Brisbane_2014_LGA_sub/ \
         --outdir lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/\
         --epsg 28356 --intilesize 1000 --outtilesize 1000 --ii 'mp' \

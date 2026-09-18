@@ -3,7 +3,7 @@
 """
 Purpose: Generate the product mosaics from individually processed LiDAR tiles.
 
-example: run_product_mosaic \
+example: alsv_product_mosaic \
             --indir lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/ \
             --pixsize 0.5 --chm_pixsize 0.2
 
