@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 """
 Fill in gaps in a DEM tile. Uses any surrounding tiles to tie the edges. The input
-tiles are the DEM tiles created by run_tile_products.py, and the outputs are
+tiles are the DEM tiles created by alsv_tile_products.py, and the outputs are
 corresponding tiles with gaps filled.
 
 Gaps are areas filled with the null value, and typically result from interpolations

@@ -21,7 +21,7 @@ index included.
 
 Example:
 ```bash
-run_lidar_standardisation --indir alsProjectDir --outdir alsProjectDir-std \
+alsv_lidar_standardisation --indir alsProjectDir --outdir alsProjectDir-std \
     --intilesize 1000 --outtilesize 1000 --epsg 28356 --ii mp --project myproj \
     --year 2025 --binsize 50
 ```
@@ -51,7 +51,7 @@ at the level of individual index bins, and will use data from surrounding bins (
 neighbouring tiles) as required. 
 
 ```bash
-run_tile_products --indir alsProjectDir-std --epsg 28356 --tilesize 1000 --pixsize 0.5
+alsv_tile_products --indir alsProjectDir-std --epsg 28356 --tilesize 1000 --pixsize 0.5
 ```
 
 ## Fill any DEM gaps
@@ -61,7 +61,7 @@ across multiple index bins. A separate program is provided which will interpolat
 surrounding raster elevation values, in order to fill any remaining gaps.
 
 ```bash
-run_dem_gapfill --indir alsProjectDir-std --pixsize 0.5 --tilesize 1000
+alsv_dem_gapfill --indir alsProjectDir-std --pixsize 0.5 --tilesize 1000
 ```
 
 Any tiles which do have gaps will be filled in and written as a separate file, with a
@@ -72,7 +72,7 @@ to the unfilled version.
 The raster tiles can be mosaiced together to produce raster products for the whole project area
 
 ```bash
-run_product_mosaic --indir alsProjectDir-std
+alsv_product_mosaic --indir alsProjectDir-std
 ```
 This will produce a number of output rasters, writing into the `indir` directory. By default
 the output files are GeoTiff files with CloudOptimizedTiff (COG) layout (different raster

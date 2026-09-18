@@ -20,7 +20,7 @@
 
 example:
 
-run_tile_products \
+alsv_tile_products \
     --indir lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/ --epsg 28356 \
     --tilesize 1000 --pixsize 0.5 --chm_pixsize 0.2
 
