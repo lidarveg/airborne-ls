@@ -202,7 +202,7 @@ def run_las_standardisation(cmdargs):
 
         # Run chunked LAS filtering
         classesToExclude = [int(i) for i in cmdargs.excludeclasses.split(',')]
-        _ = lazfile_rw.standardise_lasf(what, when, utmZone, stageCode,
+        _ = lazfile_rw.standardise_lasf(what, when, utmZone, cmdargs.epsg, stageCode,
                 cmdargs.project, cmdargs.outdir, data, easting, northing, inTilesize,
                 cmdargs.outtilesize, cmdargs.binsize, inLazfile, classesToExclude,
                 cmdargs.minz, cmdargs.maxz, cmdargs.skipexisting)
