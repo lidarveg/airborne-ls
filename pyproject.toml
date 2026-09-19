@@ -14,6 +14,7 @@ requires-python = ">=3.9"
 dependencies = [
     "gdal[numpy]",
     "laspy[lazrs]",
+    "pyproj",
     "numba",
     "pynninterp @ git+https://gitlab.com/jrsrp/sys/lidar/pynninterp@1.0.1",
     "scipy>=1.10.0",

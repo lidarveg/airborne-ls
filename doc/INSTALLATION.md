@@ -8,6 +8,7 @@ installation method. See below for some common approaches.
   * [scipy](https://scipy.org/)
   * [laspy](https://laspy.readthedocs.io/en/latest/)
   * [lazrs](https://github.com/laz-rs/laz-rs) with [Python bindings](https://github.com/laz-rs/laz-rs-python)
+  * [pyproj](https://github.com/pyproj4/pyproj)
   * [numba](https://numba.pydata.org/)
   * [pynninterp](https://gitlab.com/jrsrp/sys/lidar/pynninterp) (installing this will require a C compiler)
 
@@ -17,7 +18,7 @@ The `airborne-ls` package itself is only hosted on its Github repository, and ca
 Most of the required packages can be installed using [conda](https://continuumio-docs.readthedocs-hosted.com/miniconda/), from the `conda-forge` channel. It is strongly recommended to install in a conda environment specific for this work. For example
 
 ```bash
-conda create --channel conda-forge -n airborne-ls pip gdal scipy laspy lazrs-python numba
+conda create --channel conda-forge -n airborne-ls pip gdal scipy laspy lazrs-python pyproj numba
 conda activate airborne-ls
 pip install git+https://github.com/lidarveg/airborne-ls
 ```

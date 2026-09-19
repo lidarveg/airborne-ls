@@ -22,6 +22,7 @@ from pathlib import Path
 
 import laspy
 import numpy as np
+import pyproj
 
 from airborne_ls import filenaming_methods, qvf
 
@@ -97,7 +98,7 @@ def laspy2rec(infile):
 
 
 ###################################################################################################
-def standardise_lasf(what, when, utmZone, stageCode, projectName, outdr,
+def standardise_lasf(what, when, utmZone, epsg, stageCode, projectName, outdr,
         data, easting, northing, tile_s, out_tile_s, binSize, filename_Parent,
         classesToExclude, minZ, maxZ, skipexisting):
     """
@@ -160,6 +161,8 @@ def standardise_lasf(what, when, utmZone, stageCode, projectName, outdr,
                     data2 = data[good_indices]
                     new_hdr = copy(data.header)
                     new_hdr.point_count = 0
+                    crsObj = pyproj.CRS.from_epsg(epsg)
+                    new_hdr.add_crs(crsObj)
                     new_las = laspy.LasData(new_hdr)
 
                     ##########################################################################
