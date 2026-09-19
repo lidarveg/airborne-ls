@@ -84,8 +84,6 @@ def getCmdargs(inputargs):
               "all output files, regardless of existence"))
     parser.add_argument("--tilesize", type=int, required=True,
         help="XY dimensions of LAS tile in metres.")
-    parser.add_argument("--epsg", type=int,
-        help="EPSG number of map projection used in the input LAZ files")
 
     # Output resolutions
     pixsizeGrp = parser.add_argument_group("Pixel sizes")
@@ -118,9 +116,6 @@ def getCmdargs(inputargs):
     if cmdargs.indir is None and cmdargs.infile is None:
         msg = "Must supply one of --indir or --infile"
         raise ValueError(msg)
-
-    if cmdargs.epsg is None:
-        raise ValueError("EPSG code must be supplied.")
 
     return cmdargs
 
@@ -195,6 +190,12 @@ def run_tile_products(cmdargs):
             pctTile = np.full(tilePctShape, nullVal, dtype=np.float32)
             fpcTile = np.full(tileFpcShape, rtnClassNull, dtype=np.float32)
 
+            lasHdr = laspy.open(infileFull).header
+            crs = lasHdr.parse_crs()
+            if crs is None:
+                raise ValueError(f"File {infileFull} has no CRS (i.e. map projection)")
+            epsg = crs.to_epsg()
+
             # read in point data for the tile
             # allDataByBin stores the point data in chunks/bins for rapid access
             (allDataByBin, northing, easting, numBinRows) = lazfile_rw.bin_data(
@@ -216,7 +217,7 @@ def run_tile_products(cmdargs):
 
             del allDataByBin
 
-            writeOutputRasters(cmdargs, outfnames, easting, northing, nullVal, infileFull,
+            writeOutputRasters(cmdargs, epsg, outfnames, easting, northing, nullVal, infileFull,
                 demTile, csmTile, chmTile, maxhTile, intensTile, ptDenTile, grTile,
                 non_grTile, pctTile, fpcTile)
 
@@ -462,7 +463,7 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
             del chunk, binChunk, flightlines, hag
 
 
-def writeOutputRasters(cmdargs, outfnames, easting, northing, nullVal, infileFull,
+def writeOutputRasters(cmdargs, epsg, outfnames, easting, northing, nullVal, infileFull,
         demTile, csmTile, chmTile, maxhTile, intensTile, ptDenTile, grTile,
         non_grTile, pctTile, fpcTile):
     """
@@ -487,10 +488,10 @@ def writeOutputRasters(cmdargs, outfnames, easting, northing, nullVal, infileFul
 
     """
     rw_image_methods.writeImage(np.round(demTile, 3), outfnames["dem"],
-        tlx=easting, tly=northing, binsize=cmdargs.pixsize, epsg=cmdargs.epsg,
+        tlx=easting, tly=northing, binsize=cmdargs.pixsize, epsg=epsg,
         nullVal=nullVal, parent_file=infileFull, driverName=cmdargs.driver)
     rw_image_methods.writeImage(np.round(csmTile, 3), outfnames["csm"],
-        tlx=easting, tly=northing, binsize=cmdargs.pixsize, epsg=cmdargs.epsg,
+        tlx=easting, tly=northing, binsize=cmdargs.pixsize, epsg=epsg,
         nullVal=nullVal, parent_file=infileFull, driverName=cmdargs.driver)
 
     # interpolating over buildings can be a problem - msk out affected pixels here
@@ -507,24 +508,24 @@ def writeOutputRasters(cmdargs, outfnames, easting, northing, nullVal, infileFul
     chmTile = ndimage.median_filter(masked_array, size=3)  # median filter ignoring zeros
     chmTile[chmTile < 0.5] = nullVal
     rw_image_methods.writeImage(np.round(chmTile, 3), outfnames["chm"],
-        tlx=easting, tly=northing, binsize=cmdargs.chm_pixsize, epsg=cmdargs.epsg,
+        tlx=easting, tly=northing, binsize=cmdargs.chm_pixsize, epsg=epsg,
         nullVal=nullVal, parent_file=infileFull, driverName=cmdargs.driver)
 
     rw_image_methods.writeImage(np.round(maxhTile, 3), outfnames["maxH"],
-        tlx=easting, tly=northing, binsize=cmdargs.pixsize, epsg=cmdargs.epsg,
+        tlx=easting, tly=northing, binsize=cmdargs.pixsize, epsg=epsg,
         nullVal=nullVal, parent_file=infileFull, driverName=cmdargs.driver)
     rw_image_methods.writeImage(np.round(intensTile, 4), outfnames["intens"],
-        tlx=easting, tly=northing, binsize=cmdargs.pixsize, epsg=cmdargs.epsg,
+        tlx=easting, tly=northing, binsize=cmdargs.pixsize, epsg=epsg,
         nullVal=nullVal, parent_file=infileFull, driverName=cmdargs.driver)
     rw_image_methods.writeImage(grTile, outfnames["grdR"], tlx=easting, tly=northing,
-        binsize=cmdargs.pixsize, epsg=cmdargs.epsg, nullVal=rtnClassNull,
+        binsize=cmdargs.pixsize, epsg=epsg, nullVal=rtnClassNull,
         parent_file=infileFull, overviewResampling="MODE", driverName=cmdargs.driver)
     rw_image_methods.writeImage(non_grTile, outfnames["NonGrdCodes"],
-        tlx=easting, tly=northing, binsize=cmdargs.pixsize, epsg=cmdargs.epsg,
+        tlx=easting, tly=northing, binsize=cmdargs.pixsize, epsg=epsg,
         nullVal=rtnClassNull, parent_file=infileFull, overviewResampling="MODE",
         driverName=cmdargs.driver)
     rw_image_methods.writeImage(ptDenTile, outfnames["fstDens"],
-        tlx=easting, tly=northing, binsize=cmdargs.pixsize, epsg=cmdargs.epsg,
+        tlx=easting, tly=northing, binsize=cmdargs.pixsize, epsg=epsg,
         nullVal=0, parent_file=infileFull, driverName=cmdargs.driver)
 
     # Each of the vegetation percentile layers
@@ -533,11 +534,11 @@ def writeOutputRasters(cmdargs, outfnames, easting, northing, nullVal, infileFul
         productName = f"percentile{pp}"
         rw_image_methods.writeImage(
             np.round(layer, 3), outfnames[productName], tlx=easting, tly=northing,
-            binsize=cmdargs.pcntile_pixsize, epsg=cmdargs.epsg, nullVal=nullVal,
+            binsize=cmdargs.pcntile_pixsize, epsg=epsg, nullVal=nullVal,
             parent_file=infileFull, driverName=cmdargs.driver)
 
     rw_image_methods.writeImage(np.rint(fpcTile).astype(np.uint8), outfnames["fpc"],
-        tlx=easting, tly=northing, binsize=cmdargs.fpc_pixsize, epsg=cmdargs.epsg,
+        tlx=easting, tly=northing, binsize=cmdargs.fpc_pixsize, epsg=epsg,
         nullVal=rtnClassNull, parent_file=infileFull, driverName=cmdargs.driver)
 
     # Apply colour tables
