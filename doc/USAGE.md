@@ -22,12 +22,14 @@ index included.
 Example:
 ```bash
 alsv_lidar_standardisation --indir alsProjectDir --outdir alsProjectDir-std \
-    --intilesize 1000 --outtilesize 1000 --epsg 28356 --ii mp --project myproj \
+    --intilesize 1000 --epsg 28356 --ii mp --project myproj \
     --year 2025 --binsize 50
 ```
 
 The input data coordinates are expected to be in UTM projection, in a single zone,
-as specified by the EPSG number given on the command line.
+as specified by the EPSG number given on the command line. If no `--epsg` is given,
+the first input file will be checked for projection information, but if given, it will
+over-ride anything found in the LAS files.
 
 The output files are always compressed (i.e. with `.laz` extension). They will be written
 with a minimum LAS format (currently defaults to LAS 1.4), and the data will be
@@ -51,7 +53,7 @@ at the level of individual index bins, and will use data from surrounding bins (
 neighbouring tiles) as required. 
 
 ```bash
-alsv_tile_products --indir alsProjectDir-std --epsg 28356 --tilesize 1000 --pixsize 0.5
+alsv_tile_products --indir alsProjectDir-std --tilesize 1000 --pixsize 0.5
 ```
 
 ## Fill any DEM gaps
