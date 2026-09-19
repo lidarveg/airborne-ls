@@ -91,8 +91,8 @@ def getCmdargs(inputargs):
               "Default is same as --intilesize"))
 
     # EPSG and spatial database options
-    parser.add_argument("--epsg", type=int, required=True,
-        help="EPSG code for map information.")
+    parser.add_argument("--epsg", type=int,
+        help="EPSG code for map projection. Default will check in input LAS files")
 
     # Metadata options
     parser.add_argument("--ss", type=str, default="ap",
@@ -173,6 +173,15 @@ def run_las_standardisation(cmdargs):
     elif cmdargs.indir is not None:
         pattern = f"{cmdargs.indir}/*.la[sz]"
         infileList = sorted(glob.glob(pattern))
+
+    if cmdargs.epsg is None:
+        cmdargs.epsg = getEPSGfromLAS(infileList[0])
+        if cmdargs.epsg is not None:
+            print(f"Found EPSG {cmdargs.epsg} in input las file")
+
+    if cmdargs.epsg is None:
+        msg = "No EPSG found in first infile. Please supply --epsg"
+        raise ValueError(msg)
 
     inTilesize = cmdargs.intilesize
 
@@ -281,7 +290,7 @@ def checkElevationRange(data, minz, maxz):
 
     Parameters:
       data (laspy.lasdata.LasData): Data from LAS file
-      minz, maxz (float): Accepatble range of elevation data
+      minz, maxz (float): Acceptable range of elevation data
     """
     hdr = data.header
     zVals = data['Z'] * hdr.z_scale + hdr.z_offset
@@ -297,6 +306,25 @@ def checkElevationRange(data, minz, maxz):
         if nPts > 0:
             (lower, upper) = (aboveMaxPts.min(), aboveMaxPts.max())
             print(f"  {nPts} points are greater than {maxz}m (range {lower:.2f} to {upper:.2f})")
+
+
+def getEPSGfromLAS(lasfile):
+    """
+    Check in the given las/laz file for a CRS, and get the EPSG number
+
+    Parameters:
+      lasfile (str): Name of LAS/LAZ file
+
+    Returns:
+      epsg (int): EPSG number of projection, or None
+    """
+    f = laspy.open(lasfile)
+    crs = f.header.parse_crs()
+    if crs is not None:
+        epsg = crs.to_epsg()
+    else:
+        epsg = None
+    return epsg
 
 
 def main(args=None):
