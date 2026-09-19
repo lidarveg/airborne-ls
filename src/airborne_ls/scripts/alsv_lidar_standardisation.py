@@ -96,11 +96,11 @@ def getCmdargs(inputargs):
 
     # Metadata options
     parser.add_argument("--ss", type=str, default="ap",
-        help="Platform type (e.g., 'ap' for airborne platform).")
+        help="Platform type (e.g., 'ap' for airborne platform) (default=%(default)s)")
     parser.add_argument("--ii", type=str, required=True,
         help="Predefined sensor code; can use uk if unknown")
     parser.add_argument("--pp", type=str, default="dr",
-        help="Product type (e.g., 'dr' for discrete return).")
+        help="Product type (e.g., 'dr' for discrete return) (default=%(default)s)")
     parser.add_argument("--project", required=True,
         help="Six-character project name (e.g., 'brisba').")
     parser.add_argument("--year", type=int, required=True,
