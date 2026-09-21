@@ -18,6 +18,7 @@ def generateTestPointData():
       filename (str): Name of file of generated data
     """
     epsg = 28356    # UTM56, AMG
+    zNullVal = -999.0   # Will cause points to be discarded later
 
     # A regular grid of (x, y) points. The values below give us 4 points / square metre
     n = 2000
@@ -40,11 +41,11 @@ def generateTestPointData():
     hgtTR = hgtBL - drop
     # Bilinear interpolation between these 4 corners
     z = (
-         hgtBL * ((xMax - x) / (xMax - xMin)) * ((yMax - y) / (yMax - yMin)) +
-         hgtBR * ((x - xMin) / (xMax - xMin)) * ((yMax - y) / (yMax - yMin)) +
-         hgtTL * ((xMax - x) / (xMax - xMin)) * ((y - yMin) / (yMax - yMin)) +
-         hgtTR * ((x - xMin) / (xMax - xMin)) * ((y - yMin) / (yMax - yMin))
-        )
+        hgtBL * ((xMax - x) / (xMax - xMin)) * ((yMax - y) / (yMax - yMin)) +
+        hgtBR * ((x - xMin) / (xMax - xMin)) * ((yMax - y) / (yMax - yMin)) +
+        hgtTL * ((xMax - x) / (xMax - xMin)) * ((y - yMin) / (yMax - yMin)) +
+        hgtTR * ((x - xMin) / (xMax - xMin)) * ((y - yMin) / (yMax - yMin))
+    )
 
     # Add a conical hill
     (hillCtrX, hillCtrY) = (485280, 6963750)
@@ -67,8 +68,6 @@ def generateTestPointData():
     slopeY = numpy.radians(15)
     tanSlopeY = numpy.tan(slopeY)
     slopeRun = endDepth / tanSlopeY
-    # Calculate the gully depth everywhere
-    gullyDepth = numpy.zeros(x.shape, dtype=x.dtype)
     # A mask for the rectangle surrounding the gully
     gullySthEdge = gullyEndY - slopeRun
     gullyNthEdge = gullyEndY + slopeRun
@@ -79,11 +78,27 @@ def generateTestPointData():
     gullyNthMask = (gullyRectangleMask & (y >= gullyEndY))
 
     # Compute depth for each slope
-    gullyDepthSth = ((endDepth * (y - gullySthEdge) / slopeRun) * (x - gullyStartX) / gullyLen).clip(0, endDepth)
-    gullyDepthNth = ((endDepth * (gullyNthEdge - y) / slopeRun) * (x - gullyStartX) / gullyLen).clip(0, endDepth)
+    gullyDepthSth = ((endDepth * (y - gullySthEdge) / slopeRun) *
+                     (x - gullyStartX) / gullyLen).clip(0, endDepth)
+    gullyDepthNth = ((endDepth * (gullyNthEdge - y) / slopeRun) *
+                     (x - gullyStartX) / gullyLen).clip(0, endDepth)
     # Subtract from Z
     z[gullySthMask] = z[gullySthMask] - gullyDepthSth[gullySthMask]
     z[gullyNthMask] = z[gullyNthMask] - gullyDepthNth[gullyNthMask]
+
+    # Add a circular lake in the south-west quadrant. This will have sloping sides, but very
+    # negative values nearer the middle, so that the lidar-standardisation script will see these as
+    # outside the acceptable range and remove them, leaving a complete gap.
+    (lakeCtrX, lakeCtrY) = (485280, 6963250)
+    lakeRadius = 100
+    depthMax = 50
+    d = numpy.sqrt((x - lakeCtrX)**2 + (y - lakeCtrY)**2)
+    depth = depthMax * (1 - d / lakeRadius)
+    depthGt0 = (depth > 0)
+    z[depthGt0] = z[depthGt0] - depth[depthGt0]
+    # Insert the hole
+    middleOfLake = (d < 0.75 * lakeRadius)
+    z[middleOfLake] = zNullVal
 
     # Create the output file and write the points
     lazfile = "testpoints.laz"
