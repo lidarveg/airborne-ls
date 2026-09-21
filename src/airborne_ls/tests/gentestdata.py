@@ -26,8 +26,7 @@ def generateTestPointData():
     (xMax, yMax) = (xMin + n * step, yMin + n * step)
     # The (x, y) coordinates of every point
     (y, x) = numpy.mgrid[yMin:yMax:step, xMin:xMax:step]
-    x = x.astype(numpy.float32)
-    y = numpy.flip(y, axis=0).astype(numpy.float32)
+    y = numpy.flip(y, axis=0)
 
     # Assign some Z values to each point.
     # Begin with flat ground at 100m, with a bilinear smooth fall of 2m, from the
@@ -95,9 +94,9 @@ def generateTestPointData():
     depth = depthMax * (1 - d / lakeRadius)
     depthGt0 = (depth > 0)
     middleOfLake = (d < 0.75 * lakeRadius)
-    depthInMiddle = depth[middleOfLake].min()
+    depthToWater = depth[middleOfLake].min()
+    depth[middleOfLake] = depthToWater
     z[depthGt0] = z[depthGt0] - depth[depthGt0]
-    z[middleOfLake] = depthInMiddle
     # Convert points in the middle to water returns
     classification[middleOfLake] = const.PTCLASS_WATER
 
