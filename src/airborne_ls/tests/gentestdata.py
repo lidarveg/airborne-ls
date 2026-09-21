@@ -85,8 +85,9 @@ def generateTestPointData():
     z[gullySthMask] = z[gullySthMask] - gullyDepthSth[gullySthMask]
     z[gullyNthMask] = z[gullyNthMask] - gullyDepthNth[gullyNthMask]
 
-    # Add a circular lake in the south-west quadrant. This will have sloping sides, and all
-    # points within that will be classified as water returns instead of ground.
+    # Add a circular lake in the south-west quadrant. This will have sloping sides and a
+    # flat bottom, and all bottom points (i.e. lake surface) will be classified as water
+    # returns instead of ground.
     (lakeCtrX, lakeCtrY) = (485280, 6963250)
     lakeRadius = 100
     depthMax = 50
