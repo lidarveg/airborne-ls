@@ -115,5 +115,3 @@ def generateTestPointData(filename):
     pts.classification = classification.flatten()
 
     pts.write(filename)
-
-    return lazfile
