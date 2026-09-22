@@ -151,7 +151,7 @@ def genTree(height, radius, ctrX, ctrY):
         (x, y, z) = (x[aboveGround], y[aboveGround], z[aboveGround])
 
     classification = numpy.full(x.shape, const.PTCLASS_LOWVEGETATION, dtype=numpy.uint8)
-    classification[z > 1] = const.PTCLASS_MEDIUMVEGETATION
-    classification[z > 6] = const.PTCLASS_HIGHVEGETATION
+    classification[z > 2] = const.PTCLASS_MEDIUMVEGETATION
+    classification[z > 8] = const.PTCLASS_HIGHVEGETATION
 
     return (x, y, z, classification)
