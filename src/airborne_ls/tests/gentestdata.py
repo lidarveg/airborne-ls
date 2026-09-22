@@ -115,3 +115,43 @@ def generateTestPointData(filename):
     pts.classification = classification.flatten()
 
     pts.write(filename)
+
+
+def genTree(height, radius, ctrX, ctrY):
+    """
+    Generate some canopy points for a tree with the given height and radius. The
+    (x, y) coordinates are centred on the given (ctrX, ctrY) location.
+
+    Parameters:
+      height (float): Height (metres) of top of tree canopy
+      radius (float): Radius (metres) of circular canopy
+      ctrX, ctrY (float): (X, Y) coordinates of centre of tree
+
+    Returns:
+      x, y, z (float arrays): Arrays of x, y & z point coordinates
+      classification (uint8 array): Lidar classification of each point
+    """
+    # Fill a cubical volume with points on a regular grid
+    s = 0.5     # Grid spacing 0.5 metres
+    (x, y, z) = numpy.mgrid[-radius:radius:s, -radius:radius:s, -radius:radius:s]
+    # Now select just the points within the sphere
+    r = numpy.sqrt(x**2 + y**2 + z**2)
+    inSphere = (r < radius)
+    (x, y, z) = (x[inSphere], y[inSphere], z[inSphere])
+
+    # Shift to (ctrX, ctrY)
+    x += ctrX
+    y += ctrY
+
+    # Lift points so the top reaches height
+    z += height - radius
+    # Now select only points which are above ground
+    if height < (2 * radius):
+        aboveGround = (z > 0)
+        (x, y, z) = (x[aboveGround], y[aboveGround], z[aboveGround])
+
+    classification = numpy.full(x.shape, const.PTCLASS_LOWVEGETATION, dtype=numpy.uint8)
+    classification[z > 1] = const.PTCLASS_MEDIUMVEGETATION
+    classification[z > 6] = const.PTCLASS_HIGHVEGETATION
+
+    return (x, y, z, classification)
