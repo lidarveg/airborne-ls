@@ -100,6 +100,21 @@ def generateTestPointData(filename):
     # Convert points in the middle to water returns
     classification[middleOfLake] = const.PTCLASS_WATER
 
+    # Create some trees in the south-east quadrant
+    forestXmin = (xMin + xMax) / 2
+    forestYmin = yMin + (yMax - yMin) * 0.3
+    (numTreesX, numTreesY) = (7, 5)
+    (treeRadius, treeHeight) = (10.0, 25.0)
+    treeList = []
+    for ctrX in numpy.arange(forestXmin, forestXmin + numTreesX * treeRadius):
+        for ctrY in numpy.arange(forestYmin, forestYmin + numTreesY * treeRadius):
+            newTree = genTree(treeHeight, treeRadius, ctrX, ctrY)
+            treeList.append(newTree)
+    treeX = numpy.concatenate([t[0] for t in treeList])
+    treeY = numpy.concatenate([t[1] for t in treeList])
+    treeZ = hgtBR + numpy.concatenate([t[2] for t in treeList])
+    treeCl = numpy.concatenate([t[3] for t in treeList])
+
     # Create the output file and write the points
     header = laspy.LasHeader(point_format=1, version="1.4")
     header.offsets = numpy.array([0.0, 0.0, 0.0])
@@ -109,10 +124,10 @@ def generateTestPointData(filename):
     header.add_crs(crsObj)
 
     pts = laspy.LasData(header)
-    pts.x = x.flatten()
-    pts.y = y.flatten()
-    pts.z = z.flatten()
-    pts.classification = classification.flatten()
+    pts.x = numpy.concatenate([x.flatten(), treeX])
+    pts.y = numpy.concatenate([y.flatten(), treeY])
+    pts.z = numpy.concatenate([z.flatten(), treeZ])
+    pts.classification = numpy.concatenate([classification.flatten(), treeCl])
 
     pts.write(filename)
 
@@ -132,8 +147,9 @@ def genTree(height, radius, ctrX, ctrY):
       classification (uint8 array): Lidar classification of each point
     """
     # Fill a cubical volume with points on a regular grid
-    s = 0.5     # Grid spacing 0.5 metres
-    (x, y, z) = numpy.mgrid[-radius:radius:s, -radius:radius:s, -radius:radius:s]
+    s = 1.8     # Grid spacing. Chosen to avoid lining up with pixels or ground points
+    sv = s * 2  # Vertical spacing
+    (x, y, z) = numpy.mgrid[-radius:radius:s, -radius:radius:s, -radius:radius:sv]
     # Now select just the points within the sphere
     r = numpy.sqrt(x**2 + y**2 + z**2)
     inSphere = (r < radius)
