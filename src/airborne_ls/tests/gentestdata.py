@@ -10,12 +10,12 @@ import pyproj
 from airborne_ls import const
 
 
-def generateTestPointData():
+def generateTestPointData(filename):
     """
     Generate a single file of Lidar point data.
 
-    Returns:
-      filename (str): Name of file of generated data
+    Parameters:
+      filename (str): Name of file in which to write generated data
     """
     epsg = 28356    # UTM56, AMG
 
@@ -101,7 +101,6 @@ def generateTestPointData():
     classification[middleOfLake] = const.PTCLASS_WATER
 
     # Create the output file and write the points
-    lazfile = "testpoints.laz"
     header = laspy.LasHeader(point_format=1, version="1.4")
     header.offsets = numpy.array([0.0, 0.0, 0.0])
     header.scales = numpy.array([0.01, 0.01, 0.01])
@@ -115,6 +114,6 @@ def generateTestPointData():
     pts.z = z.flatten()
     pts.classification = classification.flatten()
 
-    pts.write(lazfile)
+    pts.write(filename)
 
     return lazfile
