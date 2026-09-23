@@ -14,6 +14,7 @@ import numpy as np
 from osgeo import gdal
 import laspy
 from airborne_ls.tests import gentestdata
+from airborne_ls import qvf
 
 
 gdal.UseExceptions()
@@ -44,6 +45,7 @@ def main():
     checkStandardisation(lazfile, indexedDir, testCounts)
     checkTileProd(indexedDir, testCounts)
     checkGapFill(indexedDir, testCounts)
+    checkFlowAcc(indexedDir, testCounts)
 
     if not cmdargs.keep:
         shutil.rmtree(tmpdir)
@@ -199,6 +201,41 @@ def checkGapFill(indexedDir, testCounts):
         testCounts.failed()
 
 
+def checkFlowAcc(indexedDir, testCounts):
+    """
+    Check flow accumulation command
+    """
+    testName = "FlowAcc"
+
+    gfdemList = glob.glob(f"{indexedDir}/*/*_bb0m6_lgapfilleddem_*.tif")
+    if len(gfdemList) == 1:
+        gfdemfile = gfdemList[0]
+    else:
+        gfdemfile = None
+
+    if gfdemfile is not None and os.path.exists(gfdemfile):
+        flowaccfile = qvf.setoptionfield(gfdemfile, 'l', 'flowacc')
+        cmd = ['alsv_flowacc', gfdemfile, flowaccfile]
+        ok = runCmd(cmd, testName)
+        if ok:
+            if os.path.exists(flowaccfile):
+                flowacc = readImg(flowaccfile)
+                # Rows and columns of pixels with largest flow
+                (rows, cols) = np.where(flowacc > 1000000)
+                uniqRows = np.unique(rows)
+                checkEqual(testName, len(uniqRows), 1, testCounts, "Large flow row count")
+                checkEqual(testName, uniqRows[0], 499, testCounts, "Large flow row")
+                checkEqual(testName, len(cols), 675, testCounts, "Large flow length")
+            else:
+                reportError(testName, "Flow accumulation file not found")
+                testCounts.failed()
+        else:
+            testCounts.failed()
+    else:
+        reportError(testName, "Gap-filled DEM file '{gfdemfile}' not found")
+        testCounts.failed()
+
+
 def runCmd(cmd, testName):
     """
     Run a command in a subprocess, and return True if all OK.
@@ -217,6 +254,9 @@ def runCmd(cmd, testName):
                                 text=True)
         (stdout, stderr) = proc.communicate()
         exitStat = proc.returncode
+        # Remove nasty cursor control string that RichDEM puts into stderr
+        badStr = '\x1b[2K'      # '<esc>[2K', erase line
+        stderr = stderr.replace(badStr, '').strip()
 
         if exitStat != 0 or len(stderr) > 0:
             msg = f"Exit status {exitStat} from {cmd[0]}.\n{stderr}"
