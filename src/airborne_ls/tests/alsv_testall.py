@@ -43,6 +43,7 @@ def main():
     createTestData(lazfile, testCounts)
     checkStandardisation(lazfile, indexedDir, testCounts)
     checkTileProd(indexedDir, testCounts)
+    checkGapFill(indexedDir, testCounts)
 
     if not cmdargs.keep:
         shutil.rmtree(tmpdir)
@@ -172,11 +173,30 @@ def checkFPC(indexedDir, testCounts):
         checkEqual(testName, forestMeanFPC, 43.333333333333336, testCounts,
             "Forest FPC mean")
 
-#
-#    cmd = f"alsv_dem_gapfill --indir {indexedDir}"
-#    (exitStat, stdout, stderr) = runCmd(cmd)
-#
-#    return (tmpdir, lazfile, indexedDir)
+
+def checkGapFill(indexedDir, testCounts):
+    """
+    Check the dem_gapfill command
+    """
+    testName = "GapFillDEM"
+    nullVal = -999.0
+
+    cmd = ['alsv_dem_gapfill', '--indir', indexedDir]
+    ok = runCmd(cmd, testName)
+    if ok:
+        gfdemList = glob.glob(f"{indexedDir}/*/*_bb0m6_lgapfilleddem_*.tif")
+        if len(gfdemList) == 0:
+            reportError(testName, "No gap-filled dem found")
+            testCounts.failed()
+        else:
+            dem = readImg(gfdemList[0])
+            nullCount = np.count_nonzero(dem == nullVal)
+            (minHgt, maxHgt) = (dem[dem != nullVal].min(), dem.max())
+            checkEqual(testName, minHgt, 68.34, testCounts, "Min hgt")
+            checkEqual(testName, maxHgt, 148.74, testCounts, "Max hgt")
+            checkEqual(testName, nullCount, 0, testCounts, "Null count")
+    else:
+        testCounts.failed()
 
 
 def runCmd(cmd, testName):
@@ -191,17 +211,23 @@ def runCmd(cmd, testName):
     Returns:
       ok (bool): True if return code == 0 and len(stderr) == 0
     """
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                            text=True)
-    (stdout, stderr) = proc.communicate()
-    exitStat = proc.returncode
+    ok = True
+    try:
+        proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                text=True)
+        (stdout, stderr) = proc.communicate()
+        exitStat = proc.returncode
 
-    if exitStat != 0 or len(stderr) > 0:
-        msg = f"Exit status {exitStat} from {cmd[0]}.\n{stderr}"
-        reportError(testName, msg)
+        if exitStat != 0 or len(stderr) > 0:
+            msg = f"Exit status {exitStat} from {cmd[0]}.\n{stderr}"
+            reportError(testName, msg)
+            ok = False
+    except FileNotFoundError:
+        reportError(testName, f"Command '{cmd[0]}' not found")
         ok = False
-    else:
-        ok = True
+    except Exception as e:
+        reportError(testName, str(e))
+        ok = False
 
     return ok
 
