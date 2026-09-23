@@ -215,7 +215,7 @@ def checkFlowAcc(indexedDir, testCounts):
 
     if gfdemfile is not None and os.path.exists(gfdemfile):
         flowaccfile = qvf.setoptionfield(gfdemfile, 'l', 'flowacc')
-        cmd = ['alsv_flowacc', gfdemfile, flowaccfile]
+        cmd = ['alsv_flowacc', gfdemfile, '--outfile', flowaccfile]
         ok = runCmd(cmd, testName)
         if ok:
             if os.path.exists(flowaccfile):
