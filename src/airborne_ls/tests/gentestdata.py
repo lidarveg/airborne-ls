@@ -3,7 +3,7 @@ Generate a test file of Lidar point data. This can then be used to run unit test
 of the various components of the package.
 
 """
-import numpy
+import numpy as np
 import laspy
 import pyproj
 
@@ -25,8 +25,8 @@ def generateTestPointData(filename):
     (xMin, yMin) = (485000 + step / 2, 6963000 + step / 2)
     (xMax, yMax) = (xMin + n * step, yMin + n * step)
     # The (x, y) coordinates of every point
-    (y, x) = numpy.mgrid[yMin:yMax:step, xMin:xMax:step]
-    y = numpy.flip(y, axis=0)
+    (y, x) = np.mgrid[yMin:yMax:step, xMin:xMax:step]
+    y = np.flip(y, axis=0)
 
     # Assign some Z values to each point.
     # Begin with flat ground at 100m, with a bilinear smooth fall of 2m, from the
@@ -49,12 +49,12 @@ def generateTestPointData(filename):
     (hillCtrX, hillCtrY) = (485280, 6963750)
     hillRadius = 75
     hMax = 50
-    d = numpy.sqrt((x - hillCtrX)**2 + (y - hillCtrY)**2)
+    d = np.sqrt((x - hillCtrX)**2 + (y - hillCtrY)**2)
     hgt = hMax * (1 - d / hillRadius)
     hgtGt0 = (hgt > 0)
     z[hgtGt0] = z[hgtGt0] + hgt[hgtGt0]
 
-    classification = numpy.full(x.shape, const.PTCLASS_GROUND, dtype=numpy.uint8)
+    classification = np.full(x.shape, const.PTCLASS_GROUND, dtype=np.uint8)
 
     # Add a gully. It starts at the bottom of the hill (with Z == 100m) and runs east, down
     # to z == (100 - endDepth)
@@ -63,8 +63,8 @@ def generateTestPointData(filename):
     gullyLen = gullyEndX - gullyStartX
     endDepth = 30
     # Slope of gully sides (running in Y direction)
-    slopeY = numpy.radians(15)
-    tanSlopeY = numpy.tan(slopeY)
+    slopeY = np.radians(15)
+    tanSlopeY = np.tan(slopeY)
     slopeRun = endDepth / tanSlopeY
     # A mask for the rectangle surrounding the gully
     gullySthEdge = gullyEndY - slopeRun
@@ -90,7 +90,7 @@ def generateTestPointData(filename):
     (lakeCtrX, lakeCtrY) = (485280, 6963250)
     lakeRadius = 100
     depthMax = 50
-    d = numpy.sqrt((x - lakeCtrX)**2 + (y - lakeCtrY)**2)
+    d = np.sqrt((x - lakeCtrX)**2 + (y - lakeCtrY)**2)
     depth = depthMax * (1 - d / lakeRadius)
     depthGt0 = (depth > 0)
     middleOfLake = (d < 0.75 * lakeRadius)
@@ -112,24 +112,24 @@ def generateTestPointData(filename):
             treeCtrY = forestYmin + i * treeRadius
             newTree = genTree(treeHeight, treeRadius, treeCtrX, treeCtrY)
             treeList.append(newTree)
-    treeX = numpy.concatenate([t[0] for t in treeList])
-    treeY = numpy.concatenate([t[1] for t in treeList])
-    treeZ = hgtBR + numpy.concatenate([t[2] for t in treeList])
-    treeCl = numpy.concatenate([t[3] for t in treeList])
+    treeX = np.concatenate([t[0] for t in treeList])
+    treeY = np.concatenate([t[1] for t in treeList])
+    treeZ = hgtBR + np.concatenate([t[2] for t in treeList])
+    treeCl = np.concatenate([t[3] for t in treeList])
 
     # Create the output file and write the points
     header = laspy.LasHeader(point_format=1, version="1.4")
-    header.offsets = numpy.array([0.0, 0.0, 0.0])
-    header.scales = numpy.array([0.01, 0.01, 0.01])
+    header.offsets = np.array([0.0, 0.0, 0.0])
+    header.scales = np.array([0.01, 0.01, 0.01])
     # Include projection
     crsObj = pyproj.CRS.from_epsg(epsg)
     header.add_crs(crsObj)
 
     pts = laspy.LasData(header)
-    pts.x = numpy.concatenate([x.flatten(), treeX])
-    pts.y = numpy.concatenate([y.flatten(), treeY])
-    pts.z = numpy.concatenate([z.flatten(), treeZ])
-    pts.classification = numpy.concatenate([classification.flatten(), treeCl])
+    pts.x = np.concatenate([x.flatten(), treeX])
+    pts.y = np.concatenate([y.flatten(), treeY])
+    pts.z = np.concatenate([z.flatten(), treeZ])
+    pts.classification = np.concatenate([classification.flatten(), treeCl])
 
     pts.write(filename)
 
@@ -151,9 +151,9 @@ def genTree(height, radius, ctrX, ctrY):
     # Fill a cubical volume with points on a regular grid
     s = 1.45     # Grid spacing. Chosen to avoid lining up with pixels or ground points
     sv = s * 3  # Vertical spacing
-    (x, y, z) = numpy.mgrid[-radius:radius:s, -radius:radius:s, -radius:radius:sv]
+    (x, y, z) = np.mgrid[-radius:radius:s, -radius:radius:s, -radius:radius:sv]
     # Now select just the points within the sphere
-    r = numpy.sqrt(x**2 + y**2 + z**2)
+    r = np.sqrt(x**2 + y**2 + z**2)
     inSphere = (r < radius)
     (x, y, z) = (x[inSphere], y[inSphere], z[inSphere])
 
@@ -168,7 +168,7 @@ def genTree(height, radius, ctrX, ctrY):
         aboveGround = (z > 0)
         (x, y, z) = (x[aboveGround], y[aboveGround], z[aboveGround])
 
-    classification = numpy.full(x.shape, const.PTCLASS_LOWVEGETATION, dtype=numpy.uint8)
+    classification = np.full(x.shape, const.PTCLASS_LOWVEGETATION, dtype=np.uint8)
     classification[z > 2] = const.PTCLASS_MEDIUMVEGETATION
     classification[z > 8] = const.PTCLASS_HIGHVEGETATION
 

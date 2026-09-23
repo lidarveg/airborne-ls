@@ -15,7 +15,7 @@ import os
 import argparse
 import glob
 
-import numpy
+import numpy as np
 from osgeo import gdal
 from scipy import ndimage
 import pynninterp
@@ -89,8 +89,8 @@ def main():
             demFilled = fillGaps(dem, nullVal, cmdargs.clumpborder)
             # Strip off the margins, back to float32, and round to 3 places
             demFilled = demFilled[tileSlice]
-            demFilled = demFilled.astype(numpy.float32)
-            demFilled = numpy.round(demFilled, 3)
+            demFilled = demFilled.astype(np.float32)
+            demFilled = np.round(demFilled, 3)
             tileChanged = (demFilled != dem[tileSlice]).any()
 
             if tileChanged:
@@ -135,30 +135,30 @@ def fillGaps(dem, nullVal, border):
         bottom = min(nRows, rowMax + border)
         demSubset = dem[top:bottom, left:right]
         # Row and column numbers for the rectangular subset region, within the full dem array
-        (r, c) = numpy.mgrid[top:bottom, left:right]
+        (r, c) = np.mgrid[top:bottom, left:right]
 
         # Make a data mask which is just a border around the clump, of width
         # <margin> pixels
         clumpRowSubset = clumpRow - top
         clumpColSubset = clumpCol - left
-        clumpSubset = numpy.zeros(demSubset.shape, dtype=numpy.uint8)
+        clumpSubset = np.zeros(demSubset.shape, dtype=np.uint8)
         clumpSubset[(clumpRowSubset, clumpColSubset)] = 1
         dilatemask = gridding_methods.circleLocs(border)
         clumpSubset = ndimage.binary_dilation(clumpSubset, dilatemask)
         clumpSubset[(clumpRowSubset, clumpColSubset)] = 0
         dataMask = ((clumpSubset == 1) & (demSubset != nullVal))
 
-        cData = c[dataMask].astype(numpy.float64)
-        rData = r[dataMask].astype(numpy.float64)
-        zData = demSubset[dataMask].astype(numpy.float64)
+        cData = c[dataMask].astype(np.float64)
+        rData = r[dataMask].astype(np.float64)
+        zData = demSubset[dataMask].astype(np.float64)
 
-        colRowNull = (numpy.vstack([clumpCol, clumpRow]).T).astype(numpy.float64)
+        colRowNull = (np.vstack([clumpCol, clumpRow]).T).astype(np.float64)
 
         demInterp = pynninterp.NaturalNeighbourPts(cData, rData, zData, colRowNull)
         # Insert these values into the copy of the original dem array
         demCopy[(clumpRow, clumpCol)] = demInterp
 
-    demCopy[numpy.isnan(demCopy)] = nullVal
+    demCopy[np.isnan(demCopy)] = nullVal
     return demCopy
 
 
@@ -172,21 +172,21 @@ def clump(img, nullVal):
 
     """
     shape = img.shape
-    clumps = numpy.zeros(shape, dtype=numpy.uint32)
+    clumps = np.zeros(shape, dtype=np.uint32)
     # 8-way connectedness
-    connect = numpy.ones((3, 3), dtype=numpy.uint8)
+    connect = np.ones((3, 3), dtype=np.uint8)
 
-    clumpid = numpy.uint32(0)
-    imgvals = numpy.unique(img)
+    clumpid = np.uint32(0)
+    imgvals = np.unique(img)
     for val in imgvals:
         if val != nullVal:
             mask = (img == val)
-            labelledmask = numpy.zeros(shape, dtype=numpy.int32)
+            labelledmask = np.zeros(shape, dtype=np.int32)
             numObj = ndimage.label(mask, structure=connect, output=labelledmask)
-            clumps = numpy.where(mask, labelledmask + clumpid, clumps)
-            clumpid += numpy.uint32(numObj)
+            clumps = np.where(mask, labelledmask + clumpid, clumps)
+            clumpid += np.uint32(numObj)
 
-    return clumps.astype(numpy.uint32)
+    return clumps.astype(np.uint32)
 
 
 def getDemImageFiles(cmdargs):
@@ -292,8 +292,8 @@ def readWithMargin(demfile, cmdargs):
     ds = gdal.Open(demfile)
     band = ds.GetRasterBand(1)
     nullVal = band.GetNoDataValue()
-    dem = numpy.full((nRows, nCols), nullVal, dtype=numpy.float32)
-    dem[ctrTop:ctrBottom, ctrLeft:ctrRight] = band.ReadAsArray().astype(numpy.float32)
+    dem = np.full((nRows, nCols), nullVal, dtype=np.float32)
+    dem[ctrTop:ctrBottom, ctrLeft:ctrRight] = band.ReadAsArray().astype(np.float32)
     del band, ds
 
     # Now read in all margins
