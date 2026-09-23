@@ -14,6 +14,10 @@ installation method. See below for some common approaches.
 
 The `airborne-ls` package itself is only hosted on its Github repository, and can be installed directly from there.
 
+### Optional Dependencies
+  * [richdem](https://richdem.readthedocs.io/). Used for hyrdological flow accumulation from
+    the computed DEM. Can be installed with conda or pip.
+
 ## Installation with conda
 Most of the required packages can be installed using [conda](https://continuumio-docs.readthedocs-hosted.com/miniconda/), from the `conda-forge` channel. It is strongly recommended to install in a conda environment specific for this work. For example
 
