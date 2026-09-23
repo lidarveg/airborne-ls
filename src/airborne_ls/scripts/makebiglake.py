@@ -14,7 +14,7 @@ which slopes upwards from that level to join the genuine terrain at some distanc
 """
 import argparse
 
-import numpy
+import numpy as np
 from osgeo import gdal
 
 
@@ -47,7 +47,7 @@ def main():
     (westtile, nullVal) = readDem(cmdargs.westtile)
     (easttile, _) = readDem(cmdargs.easttile)
 
-    dem = numpy.concatenate([westtile, easttile], axis=1)
+    dem = np.concatenate([westtile, easttile], axis=1)
     (nRows, nCols) = dem.shape
     tileNcols = nCols // 2
 
@@ -63,12 +63,12 @@ def main():
     (iRight, iBottom) = (iTop + iLen, iTop + iWidth)
 
     # Extract pixels on outer boundary
-    outerPixels = numpy.concatenate([
+    outerPixels = np.concatenate([
         dem[oTop, oLeft:oRight], dem[oBottom, oLeft:oRight],
         dem[oTop + 1:oBottom - 1, oLeft], dem[oTop + 1:oBottom - 1, oRight]
     ])
     # Extract pixels in the slope region
-    slopePixels = numpy.concatenate([
+    slopePixels = np.concatenate([
         dem[oTop:iTop, oLeft:oRight].flatten(),
         dem[iBottom:oBottom, oLeft:oRight].flatten(),
         dem[iTop + 1:iBottom - 1, oLeft:iLeft].flatten(),

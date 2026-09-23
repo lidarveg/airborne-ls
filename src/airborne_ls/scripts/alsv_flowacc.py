@@ -6,7 +6,7 @@ import sys
 import os
 import argparse
 
-import numpy
+import numpy as np
 from osgeo import gdal, gdal_array
 from airborne_ls import rw_image_methods
 
@@ -44,7 +44,7 @@ def main():
 
     dem = readDEM(cmdargs.infile, cmdargs.degradefactor)
     filledDem = richdem.FillDepressions(dem, epsilon=True)
-    flowAcc = richdem.FlowAccumulation(filledDem, method=cmdargs.method).astype(numpy.float32)
+    flowAcc = richdem.FlowAccumulation(filledDem, method=cmdargs.method).astype(np.float32)
     writeFlowAcc(cmdargs.outfile, flowAcc, cmdargs.driver)
 
 
