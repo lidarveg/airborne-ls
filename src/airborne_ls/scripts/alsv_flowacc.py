@@ -8,7 +8,7 @@ import argparse
 
 import numpy as np
 from osgeo import gdal, gdal_array
-from airborne_ls import rw_image_methods
+from airborne_ls import rw_image_methods, filenaming_methods, qvf
 
 try:
     import richdem
@@ -19,12 +19,16 @@ except ImportError:
 
 
 def getCmdargs():
+    dfltFlowAccStage = filenaming_methods.stageByProductName["flowAccumulation"]
+
     p = argparse.ArgumentParser(description="""
             Use RichDEM package to compute stream flow accumulation, with option to
             degrade imagery to lower resolution before computation.
         """)
     p.add_argument("infile", help="Input DEM raster")
-    p.add_argument("outfile", help="Output flow accumulation raster")
+    p.add_argument("--outfile",
+        help=("Output flow accumulation raster " +
+              f"(default is {dfltFlowAccStage} stage of infile)"))
     p.add_argument("--degradefactor", type=int, default=1,
         help=("Degrade factor (default=%(default)s). " +
               "Input pixel size will be increased by this factor, using averaging"))
@@ -33,7 +37,16 @@ def getCmdargs():
         help="Name of method to use, as expected by RichDEM (default=%(default)s)")
     p.add_argument("--driver", default='GTiff',
         help="Output GDAL driver name (default=%(default)s)")
-    return p.parse_args()
+    cmdargs = p.parse_args()
+
+    if cmdargs.outfile is None:
+        if qvf.isQvf(cmdargs.infile):
+            cmdargs.outfile = qvf.setstagecode(cmdargs.infile, dfltFlowAccStage)
+        else:
+            print("Infile is not conforming standard name, so outfile cannot default")
+            sys.exit(1)
+
+    return cmdargs
 
 
 def main():

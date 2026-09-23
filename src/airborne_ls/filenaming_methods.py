@@ -67,10 +67,10 @@ stageByProductName = {
     "demHS" : "bbi",           # DEM hillshade
     "csm" : "bbm",             # Canopy surface model
     "chm" : "bbn",             # Canopy height model
+    "flowAccumulation": "bbq"
 }
 # Reserved for possible future inclusion
 #    "demFilled4hydro": "bbp"   # DEM filled for hydrological analysis
-#    "flowAccumulation": "bbq"
 #    "DFMEraw": "bbr"           # Digital Flow Model Elevation (raw)
 #    "rgDFME": "bbs"            # Region-growing DFME
 #    "depressionDepth": "bbt"
@@ -79,6 +79,8 @@ stageByProductName = {
 
 # And a reverse lookup of the same information
 productNameByStage = {stageByProductName[k]: k for k in stageByProductName}
+# Products which are not processed at tile level
+nonTileProducts = set(["flowAccumulation"])
 
 
 def get_stageDict():
@@ -300,7 +302,10 @@ def get_outfnames(outputBasename, pixsize=0.5, pcntile_pixsize=5, fpc_pixsize=10
 
     fnames = {}
 
-    for productName in stageByProductName:
+    # For all products which are processed at tile level
+    tileProductNameList = [productName for productName in stageByProductName
+                           if productName not in nonTileProducts]
+    for productName in tileProductNameList:
         stageCode = stageByProductName[productName]
         outfile = qvf.setstagecode(outputBasename, stageCode)
         outfile = qvf.setoptionfield(outfile, 'l', productName)
