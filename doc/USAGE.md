@@ -92,3 +92,21 @@ is 2014.
 
 See [stageCodes.md](stageCodes.md) for all the products and stage codes.
 
+## Hydrological flow accumulation
+A simple wrapper script is provided which uses the RichDEM package to compute hydrological flow
+over the computed DEM, allowing the mapping of stream lines.
+
+Most importantly, this wrapper includes a `--degradefactor` argument, allowing the flow accumulation
+to be performed on a reduced resolution version of the DEM, which gives substantial improvements
+in speed and memory use. Working with a very high resolution DEM for this can require very large
+amounts of memory and compute time.
+
+This command would normally be run on the mosaic of the whole project, to avoid mis-matched stream lines
+at tile boundaries.
+
+Example:
+```bash
+alsv_flowacc apmpdr_rbrisba_2014_bb0m6_r50cm.tif
+```
+will produce a flow accumulation raster `apmpdr_rbrisba_2014_bbqm6_r50cm.tif`
+
