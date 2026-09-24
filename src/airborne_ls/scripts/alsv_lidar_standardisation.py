@@ -36,7 +36,7 @@ import laspy
 import numpy as np
 from osgeo import osr
 
-from airborne_ls import lazfile_rw, const
+from airborne_ls import lazfile_rw, const, filenaming_methods
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -73,6 +73,13 @@ def getCmdargs(inputargs):
     parser.add_argument("--indir", help=("Directory containing LAS/LAZ files " +
         "to process."))
     parser.add_argument("--infile", help="Name of a single LAS/LAZ file to process")
+    parser.add_argument("--groupMofN", nargs=2, metavar=('M', 'N'), type=int,
+        help=("Use only with --indir. Divide the set of tiles to be processed into N groups, " +
+              "and then process only the files in the M-th group (group numbering starts at 1)." +
+              "This helps support efficient batch processing, where the user decides how " +
+              "many batch jobs will run, and the command for each group processes only " +
+              "the tiles for that group. For example, with 5 groups, the first group " +
+              "would be specified as '--groupMofN 1 5'"))
     parser.add_argument("--skipexisting", default=False, action="store_true",
         help=("Skip existing output LAZ files. Default will re-create any " +
               "output files which already exist"))
@@ -117,8 +124,6 @@ def getCmdargs(inputargs):
     parser.add_argument("--binsize", default=50.0, type=float,
         help="XY bin size for data indexing (metres).")
 
-    # Metadata flags
-
     cmdargs = parser.parse_args(inputargs)
 
     if cmdargs.indir is not None and cmdargs.infile is not None:
@@ -127,6 +132,10 @@ def getCmdargs(inputargs):
 
     if cmdargs.indir is None and cmdargs.infile is None:
         msg = "Must supply one of --indir or --infile"
+        raise ValueError(msg)
+
+    if cmdargs.indir is None and cmdargs.groupMofN is not None:
+        msg = "Using --groupMofN requires --indir"
         raise ValueError(msg)
 
     # Validate project name
@@ -173,6 +182,9 @@ def run_las_standardisation(cmdargs):
     elif cmdargs.indir is not None:
         pattern = f"{cmdargs.indir}/*.la[sz]"
         infileList = sorted(glob.glob(pattern))
+        if cmdargs.groupMofN is not None:
+            (group, numGroups) = tuple(cmdargs.groupMofN)
+            infileList = filenaming_methods.filelistGroupSubset(infileList, group, numGroups)
 
     if cmdargs.epsg is None:
         cmdargs.epsg = getEPSGfromLAS(infileList[0])

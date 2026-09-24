@@ -51,6 +51,13 @@ def getCmdargs():
     indirGroup = p.add_argument_group("Processing a directory of DEM tiles")
     indirGroup.add_argument("--indir",
         help="A directory of standardized LAZ files, whose DEM tiles will be processed")
+    indirGroup.add_argument("--groupMofN", nargs=2, metavar=('M', 'N'), type=int,
+        help=("Use only with --indir. Divide the set of tiles to be processed into N groups, " +
+              "and then process only the files in the M-th group (group numbering starts at 1)." +
+              "This helps support efficient batch processing, where the user decides how " +
+              "many batch jobs will run, and the command for each group processes only " +
+              "the tiles for that group. For example, with 5 groups, the first group " +
+              "would be specified as '--groupMofN 1 5'"))
     indirGroup.add_argument("--pixsize", default=0.5, type=float,
         help=("Pixel size (metres) of DEM files. Used to identify DEM file names " +
               "when using --indir. (default=%(default)s)"))
@@ -63,6 +70,10 @@ def getCmdargs():
         print("Use either --demfile or --indir, but not both", file=sys.stderr)
         sys.exit(1)
 
+    if cmdargs.indir is None and cmdargs.groupMofN is not None:
+        print("Using --groupMofN requires --indir", file=sys.stderr)
+        sys.exit(1)
+
     return cmdargs
 
 
@@ -72,6 +83,7 @@ def main():
     """
     cmdargs = getCmdargs()
     demfileList = getDemImageFiles(cmdargs)
+    print(demfileList)
 
     filledLabel = "gapfilleddem"
     hillshadeProduct = "demHS"
@@ -191,7 +203,7 @@ def clump(img, nullVal):
 
 def getDemImageFiles(cmdargs):
     """
-    Use the given command line argument to work out the list of DEM tile files to process
+    Use the given command line arguments to work out the list of DEM tile files to process
 
     Parameters:
       cmdargs (argparse.Namespace): Command line arguments object
@@ -223,6 +235,11 @@ def getDemImageFiles(cmdargs):
                 raise FileNotFoundError(msg)
 
             demfileList.append(demfile)
+
+        if cmdargs.groupMofN is not None:
+            (group, numGroups) = tuple(cmdargs.groupMofN)
+            demfileList = filenaming_methods.filelistGroupSubset(demfileList, group, numGroups)
+
     return demfileList
 
 

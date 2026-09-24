@@ -79,6 +79,13 @@ def getCmdargs(inputargs):
         help="Directory containing standardised, fully indexed LAZ files to process")
     parser.add_argument("--infile",
         help="Name of a single input standardised LAZ file to process")
+    parser.add_argument("--groupMofN", nargs=2, metavar=('M', 'N'), type=int,
+        help=("Use only with --indir. Divide the set of tiles to be processed into N groups, " +
+              "and then process only the files in the M-th group (group numbering starts at 1)." +
+              "This helps support efficient batch processing, where the user decides how " +
+              "many batch jobs will run, and the command for each group processes only " +
+              "the tiles for that group. For example, with 5 groups, the first group " +
+              "would be specified as '--groupMofN 1 5'"))
     parser.add_argument("--skipexisting", default=False, action="store_true",
         help=("Skip input file if ALL its outputs already exist. Default will re-create " +
               "all output files, regardless of existence"))
@@ -117,6 +124,10 @@ def getCmdargs(inputargs):
         msg = "Must supply one of --indir or --infile"
         raise ValueError(msg)
 
+    if cmdargs.indir is None and cmdargs.groupMofN is not None:
+        msg = "Using --groupMofN requires --indir"
+        raise ValueError(msg)
+
     return cmdargs
 
 
@@ -135,6 +146,9 @@ def run_tile_products(cmdargs):
     elif cmdargs.indir is not None:
         pattern = f"{cmdargs.indir}/*.laz"
         infilelist = sorted(glob.glob(pattern))
+        if cmdargs.groupMofN is not None:
+            (group, numGroups) = tuple(cmdargs.groupMofN)
+            infilelist = filenaming_methods.filelistGroupSubset(infilelist, group, numGroups)
 
     nullVal = -999.0
     neigh8 = np.array(

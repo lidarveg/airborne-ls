@@ -337,6 +337,32 @@ def getSuffixFromDriverName(driverName):
     return suffix
 
 
+def filelistGroupSubset(filelist, group, numGroups):
+    """
+    Return a subset of the given list, by dividing the list into
+    equal sized groups, and selecting the requested group. This function
+    is used to divide up lists of files into groups for batch processing.
+
+    Parameters:
+      filelist (list): List of file names
+      group (int): Group number. First group is 1, last is numGroups
+      numGroups (int): Number of groups
+
+    Returns:
+      sublist (list): Sub-list of filelist corresponding to nominated group
+    """
+    numFiles = len(filelist)
+    filesPerGroup = numFiles // numGroups
+    i = (group - 1) * filesPerGroup
+    if group == numGroups:
+        # The last group gets whatever remains, if list was not exactly divisible
+        j = numFiles
+    else:
+        j = i + filesPerGroup
+    sublist = filelist[i:j]
+    return sublist
+
+
 def createTileDict(tile, tile_s):
     """
     Parse the name of an input tile to extract metadata for output products.
