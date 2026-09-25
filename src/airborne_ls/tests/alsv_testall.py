@@ -118,6 +118,8 @@ def checkStandardisation(lazfile, indexedDir, testCounts):
 
             checkEqual(testName, stdHdr.point_count, inHdr.point_count, testCounts,
                 "Output point count")
+            epsg = stdHdr.parse_crs().to_epsg()
+            checkEqual(testName, epsg, 28356, testCounts, "EPSG of standardised file")
     else:
         testCounts.failed()
 
