@@ -35,6 +35,7 @@ from pathlib import Path
 import laspy
 import numpy as np
 from osgeo import osr
+import pyproj
 
 from airborne_ls import lazfile_rw, const, filenaming_methods
 
@@ -99,7 +100,12 @@ def getCmdargs(inputargs):
 
     # EPSG and spatial database options
     parser.add_argument("--epsg", type=int,
-        help="EPSG code for map projection. Default will check in input LAS files")
+        help=("EPSG code for map projection of input files. Default will check in " +
+              "input LAS files, but this over-rides"))
+    parser.add_argument("--outepsg", type=int,
+        help=("EPSG code for desired output map projection. Default is same as input, " +
+              "either from the input files or from the --epsg option. The data will" +
+              "be reprojected from the input to the output coordinate system"))
 
     # Metadata options
     parser.add_argument("--ss", type=str, default="ap",
@@ -186,6 +192,7 @@ def run_las_standardisation(cmdargs):
             (group, numGroups) = tuple(cmdargs.groupMofN)
             infileList = filenaming_methods.filelistGroupSubset(infileList, group, numGroups)
 
+    # Sort out input and output map projections
     if cmdargs.epsg is None:
         cmdargs.epsg = getEPSGfromLAS(infileList[0])
         if cmdargs.epsg is not None:
@@ -195,16 +202,21 @@ def run_las_standardisation(cmdargs):
         msg = "No EPSG found in first infile. Please supply --epsg"
         raise ValueError(msg)
 
-    inTilesize = cmdargs.intilesize
+    if cmdargs.outepsg is None:
+        cmdargs.outepsg = cmdargs.epsg
 
-    what = f"{cmdargs.ss}{cmdargs.ii}{cmdargs.pp}"
-    when = f"{cmdargs.year}"
-    srs = osr.SpatialReference(epsg=cmdargs.epsg)
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(cmdargs.outepsg)
     utmZone = srs.GetUTMZone()
     if utmZone == 0:
-        msg = f"Unknown EPSG {cmdargs.epsg}. Cannot translate to filename zone code"
+        msg = f"Unknown EPSG {cmdargs.outepsg}. Cannot translate to filename zone code"
         raise ValueError(msg)
+
+    inTilesize = cmdargs.intilesize
+    what = f"{cmdargs.ss}{cmdargs.ii}{cmdargs.pp}"
+    when = f"{cmdargs.year}"
     stageCode = getStageCode(cmdargs)
+    classesToExclude = [int(i) for i in cmdargs.excludeclasses.split(',')]
 
     for inLazfile in infileList:
         print(f"Processing LAS/LAZ file: {inLazfile}")
@@ -212,6 +224,12 @@ def run_las_standardisation(cmdargs):
         # Convert to older formats to the requested LAS version.
         if data.header.version < cmdargs.minlasversion:
             data = laspy.convert(data, file_version=cmdargs.minlasversion)
+        if data.header.parse_crs() is None:
+            crsObj = pyproj.CRS.from_epsg(cmdargs.epsg)
+            data.header.add_crs(crsObj)
+
+        if cmdargs.epsg != cmdargs.outepsg:
+            reprojectPointData(data, cmdargs.outepsg)
 
         checkElevationRange(data, cmdargs.minz, cmdargs.maxz)
 
@@ -222,13 +240,31 @@ def run_las_standardisation(cmdargs):
             np.floor(np.median(data.x[data.x > 0]) / inTilesize) * inTilesize)
 
         # Run chunked LAS filtering
-        classesToExclude = [int(i) for i in cmdargs.excludeclasses.split(',')]
-        _ = lazfile_rw.standardise_lasf(what, when, utmZone, cmdargs.epsg, stageCode,
-                cmdargs.project, cmdargs.outdir, data, easting, northing, inTilesize,
-                cmdargs.outtilesize, cmdargs.binsize, inLazfile, classesToExclude,
-                cmdargs.minz, cmdargs.maxz, cmdargs.skipexisting)
+        lazfile_rw.standardise_lasf(what, when, utmZone, stageCode, cmdargs.project,
+            cmdargs.outdir, data, easting, northing, inTilesize, cmdargs.outtilesize,
+            cmdargs.binsize, inLazfile, classesToExclude, cmdargs.minz, cmdargs.maxz,
+            cmdargs.skipexisting)
 
         del data
+
+
+def reprojectPointData(data, outEPSG):
+    """
+    Reproject the point data to the given projection. Modifies the data object
+    in-place
+
+    Parameters:
+      data (laspy.LasData): Point data. Modified in-place.
+      outEPSG (int): EPSG number of desired projection
+    """
+    inCrs = data.header.parse_crs()
+    outCrs = pyproj.CRS.from_epsg(outEPSG)
+    transformer = pyproj.transformer.Transformer.from_crs(inCrs, outCrs)
+    (x, y, z) = transformer.transform(data.x, data.y, data.z)
+    data.x = x
+    data.y = y
+    data.z = z
+    data.header.add_crs(outCrs)
 
 
 def reorder_flist(lazlistfull):

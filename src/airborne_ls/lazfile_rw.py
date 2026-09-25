@@ -22,7 +22,6 @@ from pathlib import Path
 
 import laspy
 import numpy as np
-import pyproj
 
 from airborne_ls import filenaming_methods, qvf
 
@@ -98,7 +97,7 @@ def laspy2rec(infile):
 
 
 ###################################################################################################
-def standardise_lasf(what, when, utmZone, epsg, stageCode, projectName, outdr,
+def standardise_lasf(what, when, utmZone, stageCode, projectName, outdir,
         data, easting, northing, tile_s, out_tile_s, binSize, filename_Parent,
         classesToExclude, minZ, maxZ, skipexisting):
     """
@@ -106,8 +105,12 @@ def standardise_lasf(what, when, utmZone, epsg, stageCode, projectName, outdr,
     supplied files to .laz
 
     Parameters:
-        fn_base (str): Base filename for output files.
-        outdr (str): Output directory for processed files.
+        what (str): The 'what' field of output filename
+        when (str): The 'when' field of output filename
+        utmZone (int): UTM zone number of projection for output files
+        stageCode (str): 3-char stage code for output files
+        projectName (str): 6-char name of data project
+        outdir (str): Output directory for processed files.
         data (laspy.LasData): LAS/LAZ data to process.
         easting (float): Easting coordinate of top-left corner of the tile.
         northing (float): Northing coordinate of top-left corner of the tile.
@@ -119,9 +122,8 @@ def standardise_lasf(what, when, utmZone, epsg, stageCode, projectName, outdr,
                                  from the data
         minZ, maxZ (float): Min and max acceptable values (metres) for point height.
                             Heights outside this range will be discarded as errors.
+        skipexisting (bool): If true, skip file if output file already exists
 
-    Returns:
-        str: Status message indicating the result of the processing.
     """
     segments = np.arange(0, int(tile_s), int(out_tile_s))
 
@@ -130,7 +132,7 @@ def standardise_lasf(what, when, utmZone, epsg, stageCode, projectName, outdr,
     outfileTemplate = qvf.assemblefields([what, 'TILENAME', when, stageAndZone])
     outfileTemplate = qvf.setoptionfield(outfileTemplate, 'p', projectName)
     outfileTemplate = qvf.setsuffix(outfileTemplate, 'laz')
-    outfileTemplate = os.path.join(outdr, outfileTemplate)
+    outfileTemplate = os.path.join(outdir, outfileTemplate)
 
     for tile_x in segments:
         for tile_y in segments:
@@ -161,8 +163,6 @@ def standardise_lasf(what, when, utmZone, epsg, stageCode, projectName, outdr,
                     data2 = data[good_indices]
                     new_hdr = copy(data.header)
                     new_hdr.point_count = 0
-                    crsObj = pyproj.CRS.from_epsg(epsg)
-                    new_hdr.add_crs(crsObj)
                     new_las = laspy.LasData(new_hdr)
 
                     ##########################################################################
@@ -245,18 +245,12 @@ def standardise_lasf(what, when, utmZone, epsg, stageCode, projectName, outdr,
                         msg = f"File likely experienced wrapping: {outFile}"
                         logger.error(msg)
                         raise ValueError(msg)
-
-                    status = "file indexed"
                 else:
                     data2 = None
-                    status = "Status: No Good Indices"
             else:
                 print(f"Skipping outfile {outFile}, as it already exists")
-                status = "Status: Skipped, already exists"
 
     del data
-
-    return status
 
 
 ###################################################################################################
