@@ -88,6 +88,9 @@ def runMerge(cmdargs):
     else:
         outStageList = list(filenaming_methods.stageByProductName.values())
     productNameList = [filenaming_methods.productNameByStage[stage] for stage in outStageList]
+    # Remove product names which are not supposed to be as tiles in the first place.
+    productNameList = [prodName for prodName in productNameList
+                       if prodName not in filenaming_methods.nonTileProducts]
 
     # Start with the full list of LAZ files
     infiles = sorted(glob.glob(f"{cmdargs.indir}/*.laz"))
