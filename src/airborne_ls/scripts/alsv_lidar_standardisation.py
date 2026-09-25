@@ -264,6 +264,11 @@ def reprojectPointData(data, outEPSG):
     data.x = x
     data.y = y
     data.z = z
+    # Recompute the X & Y min/max values
+    data.header.mins[0] = x.min()
+    data.header.mins[1] = y.min()
+    data.header.maxs[0] = x.max()
+    data.header.maxs[1] = y.max()
     data.header.add_crs(outCrs)
 
 
