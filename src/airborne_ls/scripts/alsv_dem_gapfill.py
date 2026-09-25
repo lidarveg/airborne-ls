@@ -83,7 +83,6 @@ def main():
     """
     cmdargs = getCmdargs()
     demfileList = getDemImageFiles(cmdargs)
-    print(demfileList)
 
     filledLabel = "gapfilleddem"
     hillshadeProduct = "demHS"
