@@ -175,22 +175,14 @@ def standardise_lasf(what, when, utmZone, stageCode, projectName, outdir,
                     index = ((yIdx * nbinsRow) + xIdx).astype(int)
                     nbins = int(nbinsRow * nbinsRow)
 
-                    start = 0
-                    newIdx = [0]
-                    sortingIdx = []
-                    # needs speeding up..
-                    for ct, binIdx in enumerate(range(nbins + 1)):
-                        vals2 = np.argwhere(index == binIdx)
-                        if sum(vals2) >= 0:
-                            start += len(vals2)
-                            if len(sortingIdx) < 1:
-                                sortingIdx = vals2
-                            else:
-                                sortingIdx = np.append(sortingIdx, vals2)
-                            newIdx.append(np.copy(start))
-                    newIdx.append(len(data2.x))
-                    data2 = data2[sortingIdx]
-                    del sortingIdx
+                    # Sort the points to group all points by bin. Create an index recording
+                    # start and end points for each bin, allowing fast retrieval of points by bin.
+                    # Note that we preserve the order of points within each bin.
+                    sorter = np.argsort(index, stable=True)
+                    data2 = data2[sorter]
+                    binCounts = np.bincount(index)
+                    bounds = np.cumsum(binCounts)
+                    newIdx = np.concatenate(([0], bounds))
 
                     ##########################################################################
                     newIdx = np.array(newIdx, dtype=np.float64)
