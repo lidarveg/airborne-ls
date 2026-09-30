@@ -180,7 +180,7 @@ def standardise_lasf(what, when, utmZone, stageCode, projectName, outdir,
                     # Note that we preserve the order of points within each bin.
                     sorter = np.argsort(index, stable=True)
                     data2 = data2[sorter]
-                    binCounts = np.bincount(index)
+                    binCounts = np.bincount(index, minlength=nbins)
                     bounds = np.cumsum(binCounts)
                     newIdx = np.concatenate(([0], bounds))
 
