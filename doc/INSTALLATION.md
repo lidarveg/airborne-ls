@@ -86,7 +86,7 @@ uv init --managed-python --python 3.12 airbproj
 
 ## Docker
 
-See the `../Dockerfile` for an example of how the installation can be done in a container.
+See the [`Dockerfile`](../Dockerfile) for an example of how the installation can be done in a container.
 
 ```sh
 docker build --tag airbornels:latest .
@@ -99,7 +99,7 @@ docker run --rm \
   -u "$(id -u):$(id -g)" \
   -v "$PWD":/work \
   airbornels:latest \
-  alsv_lidar_standardisation --indir Brisbane_2009_LGA_sub --outdir Brisbane_2009_LGA_sub-std \
+  alsv_lidar_standardisation --indir alsProjectDir --outdir alsProjectDir-std \
     --intilesize 1000 --epsg 28356 --ii mp --project myproj \
     --year 2025 --binsize 50
 
