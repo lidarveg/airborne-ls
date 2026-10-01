@@ -42,3 +42,65 @@ Once you have a full installation of GDAL, the remaining requirements can be ins
 ```bash
 pip install git+https://github.com/lidarveg/airborne-ls
 ```
+
+## Installation with `uv`
+
+Since this project depends on the gdal python bindings, which depend on your
+system's gdal version, we need to be careful when adding the gdal package. The best
+way of doing this is by adding a constraint dependency to your project.
+
+Installation in a uv project might proceed like:
+
+```sh
+uv init airbproj
+cd airbproj
+# add a constraint matching your system's gdal version
+cat >> pyproject.toml <<EOF
+[tool.uv]
+constraint-dependencies = ["gdal==$(gdal-config --version)"]
+EOF
+
+uv add git+https://github.com/lidarveg/airborne-ls
+```
+
+If your gdal version is < 3.9, then you will also need to restrict numpy to be < 2.
+The constraint dependency then becomes:
+
+```sh
+cat >> pyproject.toml <<EOF
+[tool.uv]
+constraint-dependencies = ["gdal==$(gdal-config --version)", "numpy<2"]
+EOF
+```
+
+The gdal python bindings on pypi are source distribution only, and `pynninterp` will
+also need to be built from source, so you will need compilers and git to install the package.
+On ubuntu like systems, this would mean `apt-get install build-essential python3-dev git`.
+The python headers `python3-dev` are needed if you use the system python distribution. Python
+distributed by uv includes headers, so if you prefer to use uv managed python the package
+`python3-dev` is not needed. You would need to set up your uv project using something like;
+
+```sh
+uv init --managed-python --python 3.12 airbproj
+```
+
+## Docker
+
+See the [`Dockerfile`](../Dockerfile) for an example of how the installation can be done in a container.
+
+```sh
+docker build --tag airbornels:latest .
+```
+
+Then the commands can be run like:
+
+```sh
+docker run --rm \
+  -u "$(id -u):$(id -g)" \
+  -v "$PWD":/work \
+  airbornels:latest \
+  alsv_lidar_standardisation --indir alsProjectDir --outdir alsProjectDir-std \
+    --intilesize 1000 --epsg 28356 --ii mp --project myproj \
+    --year 2025 --binsize 50
+
+```
