@@ -188,7 +188,7 @@ def standardise_lasf(what, when, utmZone, stageCode, projectName, outdir,
                     newIdx = np.array(newIdx, dtype=np.uint64)
                     nElems = int(nbins + 1)
                     #############################
-                    binSizePacked = struct.pack("<2Q", np.uint64(binSize), np.uint64(nbins))
+                    binSizePacked = struct.pack("<dQ", np.float64(binSize), np.uint64(nbins))
                     # Instantiate and store new VLR.
                     new_vlr = laspy.VLR(
                         user_id=const.VLR_USERID_JRSRP,
@@ -308,7 +308,6 @@ def read_laz_index(infile, tile_s):
                                                   record_ids=[const.VLR_RECORDID_BINBOUNDS])
             bin_index_vlr = bin_index_vlr_list[0]
             oldVlrs = False
-            print('Reading new VLRs')
         else:
             # Old non-conformant VLRs
             for vlr in inVLRs:
@@ -333,7 +332,7 @@ def read_laz_index(infile, tile_s):
             )
 
         # Unpack binSize and nbins
-        bin_info_format = "<2Q"
+        bin_info_format = "<dQ"
         if oldVlrs:
             bin_info_format = "2d"
         binSize, nbins = struct.unpack(bin_info_format, bin_info_vlr.record_data)
