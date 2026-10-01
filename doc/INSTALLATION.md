@@ -86,7 +86,7 @@ uv init --managed-python --python 3.12 airbproj
 
 ## Docker
 
-See the [`Dockerfile`](../Dockerfile) for an example of how the installation can be done in a container.
+See the [`Dockerfile`](../examples/Dockerfile) for an example of how the installation can be done in a container.
 
 ```sh
 docker build --tag airbornels:latest .
