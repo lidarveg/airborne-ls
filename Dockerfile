@@ -12,7 +12,6 @@ ARG PYTHON_VERSION=3.12
 ARG AIRBORNE_LS_REF=main
 
 # ---- System build tools ----------------------------------------------------
-# Drop the stale Apache Arrow apt source (if present) so apt-get update works.
 # No python3-dev: uv-managed Python ships its own headers.
 RUN  apt-get update \
  && apt-get install -y --no-install-recommends build-essential git ca-certificates \
