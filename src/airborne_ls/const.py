@@ -29,3 +29,10 @@ PTCLASS_TEMPORALEXCLUSION = 22
 
 # User-defined (i.e. non-standard) classification values
 PTCLASS_NOISE_PROVIDERDEFINED = 64
+
+
+# We define some VLR types, under our own user_id
+VLR_USERID_JRSRP = "JRSRP Aust"
+# Records for our square bin index.
+VLR_RECORDID_BINSIZE = 1            # (float64, uint64)
+VLR_RECORDID_BINBOUNDS = 2          # All uint64
