@@ -23,7 +23,7 @@ from pathlib import Path
 import laspy
 import numpy as np
 
-from airborne_ls import filenaming_methods, qvf
+from airborne_ls import filenaming_methods, qvf, const
 
 logger = logging.getLogger(__name__)
 
@@ -185,26 +185,26 @@ def standardise_lasf(what, when, utmZone, stageCode, projectName, outdir,
                     newIdx = np.concatenate(([0], bounds))
 
                     ##########################################################################
-                    newIdx = np.array(newIdx, dtype=np.float64)
+                    newIdx = np.array(newIdx, dtype=np.uint64)
                     nElems = int(nbins + 1)
                     #############################
-                    binS = struct.pack("2d", np.float64(binSize), np.float64(nbins))
+                    binSizePacked = struct.pack("<2Q", np.uint64(binSize), np.uint64(nbins))
                     # Instantiate and store new VLR.
                     new_vlr = laspy.VLR(
-                        user_id="BINSIZE",
-                        record_id=1,
-                        description="defines binSize chunk",
-                        record_data=binS,
+                        user_id=const.VLR_USERID_JRSRP,
+                        record_id=const.VLR_RECORDID_BINSIZE,
+                        description="Bin size & count",
+                        record_data=binSizePacked,
                     )
                     new_las.vlrs.append(new_vlr)
                     #############################
-                    bin_pos = struct.pack(f"{nElems}d", *newIdx[0:nElems])
+                    binBoundsPacked = struct.pack(f"<{nElems}Q", *newIdx[0:nElems])
                     # Instantiate and store new VLR.
                     new_vlr = laspy.VLR(
-                        user_id="BIN_POS",
-                        record_id=2,
-                        description="defines BIN_POS",
-                        record_data=bin_pos,
+                        user_id=const.VLR_USERID_JRSRP,
+                        record_id=const.VLR_RECORDID_BINBOUNDS,
+                        description="Bin start/end values",
+                        record_data=binBoundsPacked,
                     )
                     new_las.vlrs.append(new_vlr)
                     #####################################
@@ -298,32 +298,52 @@ def read_laz_index(infile, tile_s):
         bin_index_vlr = None
 
         #########################################################################
-        for vlr in inVLRs:
-            if vlr.user_id == "BINSIZE":
-                # VLR containing binSize and nbins
-                bin_info_vlr = vlr
-            elif vlr.user_id == "BIN_POS":
-                # VLR containing bin positions
-                bin_index_vlr = vlr
+        # Look for the conformant VLRs
+        bin_info_vlr_list = inVLRs.get_by_id(user_id=const.VLR_USERID_JRSRP,
+                                             record_ids=[const.VLR_RECORDID_BINSIZE])
+        if len(bin_info_vlr_list) > 0:
+            # These are the newer, standard-conformant VLRs for the index
+            bin_info_vlr = bin_info_vlr_list[0]
+            bin_index_vlr_list = inVLRs.get_by_id(user_id=const.VLR_USERID_JRSRP,
+                                                  record_ids=[const.VLR_RECORDID_BINBOUNDS])
+            bin_index_vlr = bin_index_vlr_list[0]
+            oldVlrs = False
+            print('Reading new VLRs')
+        else:
+            # Old non-conformant VLRs
+            for vlr in inVLRs:
+                if vlr.user_id == "BINSIZE":
+                    # VLR containing binSize and nbins
+                    bin_info_vlr = vlr
+                elif vlr.user_id == "BIN_POS":
+                    # VLR containing bin positions
+                    bin_index_vlr = vlr
+            oldVlrs = True
         #########################################################################
 
         # Check if required VLRs were found
         if bin_info_vlr is None:
             raise ValueError(
-                f"Could not find VLR with user_id='BINSIZE' and record_id=1 in file {infile}"
+                f"Could not find VLR for bin size & count in file {infile}"
             )
 
         if bin_index_vlr is None:
             raise ValueError(
-                f"Could not find VLR with user_id='BIN_POS' and record_id=2 in file {infile}"
+                f"Could not find VLR for bin bounds in file {infile}"
             )
 
         # Unpack binSize and nbins
-        binSize, nbins = struct.unpack("2d", bin_info_vlr.record_data)
+        bin_info_format = "<2Q"
+        if oldVlrs:
+            bin_info_format = "2d"
+        binSize, nbins = struct.unpack(bin_info_format, bin_info_vlr.record_data)
 
         if nbins > 1:
             n_elements = int(nbins + 1)
-            newIdx = struct.unpack(f"{n_elements}d", bin_index_vlr.record_data)
+            bin_index_format = f"<{n_elements}Q"
+            if oldVlrs:
+                bin_index_format = f"{n_elements}d"
+            newIdx = struct.unpack(bin_index_format, bin_index_vlr.record_data)
             newIdx = np.array(newIdx, dtype=np.int32)
         else:
             msg = f"Failed to import laz binning index in file {infile}"
