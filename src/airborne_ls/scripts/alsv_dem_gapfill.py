@@ -95,7 +95,7 @@ def main():
             print("Skipping", demfile)
         else:
             inHdr = rw_image_methods.imgH(demfile)
-            epsgNum = int(inHdr['sr'].GetAuthorityCode())
+            epsgNum = int(inHdr['sr'].GetAuthorityCode('PROJCS'))
             (dem, tileSlice, nullVal) = readWithMargin(demfile, cmdargs)
             demFilled = fillGaps(dem, nullVal, cmdargs.clumpborder)
             # Strip off the margins, back to float32, and round to 3 places
