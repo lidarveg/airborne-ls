@@ -97,7 +97,7 @@ def main():
             inHdr = rw_image_methods.imgH(demfile)
             epsgNum = int(inHdr['sr'].GetAuthorityCode('PROJCS'))
             (dem, tileSlice, nullVal) = readWithMargin(demfile, cmdargs)
-            demFilled = fillGaps(dem, nullVal, cmdargs.clumpborder)
+            demFilled = fillGaps(dem, nullVal, cmdargs.clumpborder, tileSlice)
             # Strip off the margins, back to float32, and round to 3 places
             demFilled = demFilled[tileSlice]
             demFilled = demFilled.astype(np.float32)
@@ -118,7 +118,7 @@ def main():
                 gdal.DEMProcessing(outDemHSfile, demGapFilledFile, "hillshade", options=demOptions)
 
 
-def fillGaps(dem, nullVal, border):
+def fillGaps(dem, nullVal, border, tileSlice):
     """
     Fill in gaps (areas filled with null value) in the given dem array, by
     interpolating from the surrounding pixels. Return a filled copy of the array.
@@ -126,6 +126,9 @@ def fillGaps(dem, nullVal, border):
     Parameters:
       dem (array): 2D float array of DEM values
       nullVal (float): Null value
+      border (int): Size (pixels) of border around a clump to be filled
+      tileSlice (slice tuple): Index of sub-array of dem corresponding to
+                               original tile
 
     Returns:
       (array): Filled copy of dem array
@@ -140,37 +143,92 @@ def fillGaps(dem, nullVal, border):
         (clumpRow, clumpCol) = valIndices[clumpId]
         (rowMin, rowMax) = (clumpRow.min(), clumpRow.max())
         (colMin, colMax) = (clumpCol.min(), clumpCol.max())
-        left = max(0, colMin - border)
-        right = min(nCols, colMax + border)
-        top = max(0, rowMin - border)
-        bottom = min(nRows, rowMax + border)
-        demSubset = dem[top:bottom, left:right]
-        # Row and column numbers for the rectangular subset region, within the full dem array
-        (r, c) = np.mgrid[top:bottom, left:right]
 
-        # Make a data mask which is just a border around the clump, of width
-        # <margin> pixels
-        clumpRowSubset = clumpRow - top
-        clumpColSubset = clumpCol - left
-        clumpSubset = np.zeros(demSubset.shape, dtype=np.uint8)
-        clumpSubset[(clumpRowSubset, clumpColSubset)] = 1
-        dilatemask = gridding_methods.circleLocs(border)
-        clumpSubset = ndimage.binary_dilation(clumpSubset, dilatemask)
-        clumpSubset[(clumpRowSubset, clumpColSubset)] = 0
-        dataMask = ((clumpSubset == 1) & (demSubset != nullVal))
+        # Check whether this clump is one we should try to fill
+        outsideTile = clumpBBoxOutsideTile(tileSlice, rowMin, rowMax, colMin, colMax)
+        intersectsTile = False
+        if not outsideTile:
+            intersectsTile = clumpIntersects(clumpRow, clumpCol, dem.shape, tileSlice)
+        reachesEdge = ((rowMin == 0) or (rowMax == dem.shape[0]) or
+                       (colMin == 0) or (colMax == dem.shape[1]))
+        toBeFilled = (not outsideTile) and intersectsTile and (not reachesEdge)
 
-        cData = c[dataMask].astype(np.float64)
-        rData = r[dataMask].astype(np.float64)
-        zData = demSubset[dataMask].astype(np.float64)
+        if toBeFilled:
+            left = max(0, colMin - border)
+            right = min(nCols, colMax + border)
+            top = max(0, rowMin - border)
+            bottom = min(nRows, rowMax + border)
+            demSubset = dem[top:bottom, left:right]
+            # Row and column numbers for the rectangular subset region, within the full dem array
+            (r, c) = np.mgrid[top:bottom, left:right]
 
-        colRowNull = (np.vstack([clumpCol, clumpRow]).T).astype(np.float64)
+            # Make a data mask which is just a border around the clump, of width
+            # <margin> pixels
+            clumpRowSubset = clumpRow - top
+            clumpColSubset = clumpCol - left
+            clumpSubset = np.zeros(demSubset.shape, dtype=np.uint8)
+            clumpSubset[(clumpRowSubset, clumpColSubset)] = 1
+            dilatemask = gridding_methods.circleLocs(border)
+            clumpSubset = ndimage.binary_dilation(clumpSubset, dilatemask)
+            clumpSubset[(clumpRowSubset, clumpColSubset)] = 0
+            dataMask = ((clumpSubset == 1) & (demSubset != nullVal))
 
-        demInterp = pynninterp.NaturalNeighbourPts(cData, rData, zData, colRowNull)
-        # Insert these values into the copy of the original dem array
-        demCopy[(clumpRow, clumpCol)] = demInterp
+            cData = c[dataMask].astype(np.float64)
+            rData = r[dataMask].astype(np.float64)
+            zData = demSubset[dataMask].astype(np.float64)
+
+            colRowNull = (np.vstack([clumpCol, clumpRow]).T).astype(np.float64)
+
+            demInterp = pynninterp.NaturalNeighbourPts(cData, rData, zData, colRowNull)
+            # Insert these values into the copy of the original dem array
+            demCopy[(clumpRow, clumpCol)] = demInterp
 
     demCopy[np.isnan(demCopy)] = nullVal
     return demCopy
+
+
+def clumpBBoxOutsideTile(tileSlice, rowMin, rowMax, colMin, colMax):
+    """
+    Check if the clump bounding box is outside the tile bounds
+
+    Parameters:
+      tileSlice (slice tuple): Index of sub-array of dem corresponding to
+                               original tile
+      rowMin, rowMax, colMin, colMax (int): Bounding box within array of the
+                                            clump
+
+    Returns:
+      (bool): True if clump bounding box is outside the tile bounds
+    """
+    (tileRowMin, tileRowMax) = (tileSlice[0].start, tileSlice[0].stop)
+    (tileColMin, tileColMax) = (tileSlice[1].start, tileSlice[1].stop)
+
+    outside = ((rowMax < tileRowMin) or (rowMin > tileRowMax) or
+               (colMax < tileColMin) or (colMin > tileColMax))
+    return outside
+
+
+def clumpIntersects(clumpRow, clumpCol, demShape, tileSlice):
+    """
+    If the clump may intersect, this checks every pixel to see if it really does.
+
+    Parameter:
+      clumpRow, clumpCol (index tuple): Indices of clump in full dem array
+      demShape (tuple): Shape of full dem array
+      tileSlice (slice tuple): Slice for tile within full dem array
+
+    Returns:
+      (bool): True if clump intersects original tile
+    """
+    # Empty version of full array
+    arr = np.zeros(demShape, dtype=np.uint8)
+    # Set clump pixels to 1
+    arr[(clumpRow, clumpCol)] = 1
+    # Count how may are in original tile
+    count = np.count_nonzero(arr[tileSlice])
+
+    intersects = (count > 0)
+    return intersects
 
 
 def clump(img, nullVal):
