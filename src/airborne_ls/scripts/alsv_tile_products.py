@@ -301,6 +301,7 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
       non_grTile : Output array for ?????
       pcntTile : Output array for vegetation height percentiles
       fpcTile : Output array for Foliage Projective Cover
+      timings (Timers): A Timers object to record timings
     """
     binKey = f"row_{binRow}_col_{binCol}"
     binTopLeftX = easting + binSize * (binCol - 1)
