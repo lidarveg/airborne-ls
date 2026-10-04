@@ -45,6 +45,7 @@ from airborne_ls import (
     gridding_methods,
     lazfile_rw,
     rw_image_methods,
+    timinghooks
 )
 
 logger = logging.getLogger(__name__)
@@ -113,6 +114,10 @@ def getCmdargs(inputargs):
             "but too small can leave extra holes in DEM"))
     parser.add_argument("--driver", default='GTiff',
         help="GDAL driver for output image format (default=%(default)s)")
+    parser.add_argument("--reporttimings", default=False, action="store_true",
+        help=("Print a simple report of internal timing information. This is intended " +
+              "for developers, as it requires knowledge of the source code to " +
+              "interpret sensibly"))
 
     cmdargs = parser.parse_args(inputargs)
 
@@ -155,8 +160,11 @@ def run_tile_products(cmdargs):
         [[-1, 1], [0, 1], [1, 1], [-1, 0], [1, 0], [-1, -1], [0, -1], [1, -1]]
     )
 
+    timings = timinghooks.Timers()
+
     # Read the first file to get bin size and number of bins
-    (binSize, nbins, _, _) = lazfile_rw.read_laz_index(infilelist[0], cmdargs.tilesize)
+    with timings.interval('readlaz'):
+        (binSize, nbins, _, _) = lazfile_rw.read_laz_index(infilelist[0], cmdargs.tilesize)
 
     logger.info(f"binSize = {binSize} and nbins = {nbins} for {infilelist[0]}")
 
@@ -212,8 +220,9 @@ def run_tile_products(cmdargs):
 
             # read in point data for the tile
             # allDataByBin stores the point data in chunks/bins for rapid access
-            (allDataByBin, northing, easting, numBinRows) = lazfile_rw.bin_data(
-                infileFull, cmdargs.tilesize, nbins)
+            with timings.interval('readbindata'):
+                (allDataByBin, northing, easting, numBinRows) = lazfile_rw.bin_data(
+                    infileFull, cmdargs.tilesize, nbins)
             numBinCols = numBinRows
 
             logger.info(f"Indexed LAZ FILE read in for {infileFull}")
@@ -224,16 +233,18 @@ def run_tile_products(cmdargs):
 
             for binRow in range(1, numBinRows + 1):
                 for binCol in range(1, numBinCols + 1):
-                    processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8,
-                        easting, northing, nRowsPerBin, nColsPerBin, nullVal, numBinRows,
-                        demTile, csmTile, chmTile, maxhTile, intensTile, ptDenTile, grTile,
-                        non_grTile, pctTile, fpcTile)
+                    with timings.interval('total_processing'):
+                        processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8,
+                            easting, northing, nRowsPerBin, nColsPerBin, nullVal, numBinRows,
+                            demTile, csmTile, chmTile, maxhTile, intensTile, ptDenTile, grTile,
+                            non_grTile, pctTile, fpcTile, timings)
 
             del allDataByBin
 
-            writeOutputRasters(cmdargs, epsg, outfnames, easting, northing, nullVal, infileFull,
-                demTile, csmTile, chmTile, maxhTile, intensTile, ptDenTile, grTile,
-                non_grTile, pctTile, fpcTile)
+            with timings.interval('write_rasters'):
+                writeOutputRasters(cmdargs, epsg, outfnames, easting, northing, nullVal,
+                    infileFull, demTile, csmTile, chmTile, maxhTile, intensTile, ptDenTile,
+                    grTile, non_grTile, pctTile, fpcTile)
 
             # calculate and write out to a temporary file return,pulse,area stats while
             # data held in memory
@@ -254,10 +265,13 @@ def run_tile_products(cmdargs):
                 fout.write(f"nReturns = {nReturns}\n")
                 fout.write(f"DEM area (pixels) = {dem_area}\n")
 
+    if cmdargs.reporttimings:
+        reportTimings(timings)
+
 
 def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, easting, northing,
         nRowsPerBin, nColsPerBin, nullVal, numBinRows, demTile, csmTile, chmTile, maxhTile,
-        intensTile, ptDenTile, grTile, non_grTile, pctTile, fpcTile):
+        intensTile, ptDenTile, grTile, non_grTile, pctTile, fpcTile, timings):
     """
     Do all calculation for a single index bin. Fills in the pixels for the bin
     into all the output arrays for the tile.
@@ -298,8 +312,9 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
             nbrBinKey = f"row_{int(binRow + n8[0])}_col_{int(binCol + n8[1])}"
             nbrBinData = np.copy(allDataByBin[nbrBinKey])
             if (nbrBinData.shape)[0] > 1:
-                nbrBinData = trimNeighbourBin(nbrBinData, n8[0], n8[1],
-                    cmdargs.binmargin, binTopLeftX, binTopLeftY, binSize)
+                with timings.interval('trimnbrbins'):
+                    nbrBinData = trimNeighbourBin(nbrBinData, n8[0], n8[1],
+                        cmdargs.binmargin, binTopLeftX, binTopLeftY, binSize)
                 chunk = np.concatenate((chunk, nbrBinData))
 
         # run dem
@@ -314,32 +329,37 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
             xst_bin = easting + int((binCol - 1) * binSize)
             yst_bin = northing - int((numBinRows - binRow) * binSize)
             if np.sum(grdhits) > 0:
-                dem = gridding_methods.makeDemTile(
-                    chunk["X"][grdhits], chunk["Y"][grdhits],
-                    chunk["Z"][grdhits], xst_bin, yst_bin, binSize,
-                    cmdargs.pixsize, nullVal=nullVal)
+                with timings.interval('makedemtile'):
+                    dem = gridding_methods.makeDemTile(
+                        chunk["X"][grdhits], chunk["Y"][grdhits],
+                        chunk["Z"][grdhits], xst_bin, yst_bin, binSize,
+                        cmdargs.pixsize, nullVal=nullVal)
                 demTile[binSlice] = dem
 
             # Get pixel coords of each point return, within the array for the bin
-            (row, col) = gridding_methods.xyToRowCol(
-                binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
-                cmdargs.pixsize)
+            with timings.interval('xytorowcol'):
+                (row, col) = gridding_methods.xyToRowCol(
+                    binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
+                    cmdargs.pixsize)
 
             # Count return classes per-pixel
             classCountsShape = (CLASSCOUNTS_MAXCLASS + 1, nRowsPerBin, nColsPerBin)
             classCounts = np.zeros(classCountsShape, dtype=np.uint16)
-            gridding_methods.makeClassCounts(row, col, binChunk["X"],
-                binChunk["Y"], binChunk["Z"], binChunk["CLASSIFICATION"],
-                classCounts)
+            with timings.interval('classcounts'):
+                gridding_methods.makeClassCounts(row, col, binChunk["X"],
+                    binChunk["Y"], binChunk["Z"], binChunk["CLASSIFICATION"],
+                    classCounts)
 
             #######################################################################
             # run csm
-            xValsA, yValsA, zValsA = gridding_methods.maxH_xyzLocs(
-                chunk["X"], chunk["Y"], chunk["Z"], cmdargs.pixsize
-            )
-            csm = gridding_methods.makeDemTile(
-                xValsA, yValsA, zValsA, xst_bin, yst_bin,
-                binSize, cmdargs.pixsize, nullVal=nullVal)
+            with timings.interval('maxh_xyzlocs'):
+                xValsA, yValsA, zValsA = gridding_methods.maxH_xyzLocs(
+                    chunk["X"], chunk["Y"], chunk["Z"], cmdargs.pixsize
+                )
+            with timings.interval('csm_demtile'):
+                csm = gridding_methods.makeDemTile(
+                    xValsA, yValsA, zValsA, xst_bin, yst_bin,
+                    binSize, cmdargs.pixsize, nullVal=nullVal)
             csm = csm - dem
             csm[dem == nullVal] = nullVal
             csmTile[binSlice] = csm
@@ -348,11 +368,12 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
             # interp to irregular grid
             nonGround = (binChunk["CLASSIFICATION"] != const.PTCLASS_GROUND)
 
-            heightAboveGround = (
-                gridding_methods.createHeightAboveGround(nonGround,
-                    binChunk["X"], binChunk["Y"], binChunk["Z"],
-                    chunk["X"][grdhits], chunk["Y"][grdhits], chunk["Z"][grdhits])
-            )
+            with timings.interval('heightaboveground_binonly'):
+                heightAboveGround = (
+                    gridding_methods.createHeightAboveGround(nonGround,
+                        binChunk["X"], binChunk["Y"], binChunk["Z"],
+                        chunk["X"][grdhits], chunk["Y"][grdhits], chunk["Z"][grdhits])
+                )
 
             pntIntensity = binChunk["INTENSITY"]
             # pntClass = binChunk["CLASSIFICATION"]
@@ -366,10 +387,11 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
             haveGroundReturn = np.full((nRowsPerBin, nColsPerBin), 254, dtype=np.uint8)
             nonGroundClasses = np.full((nRowsPerBin, nColsPerBin), 254, dtype=np.uint8)
 
-            gridding_methods.maxH_workflow_layers(
-                row, col, binChunk["X"], binChunk["Y"],
-                heightAboveGround, pntIntensity, binChunk["CLASSIFICATION"],
-                xArr, yArr, zArr, intensityAtMaxH, haveGroundReturn)
+            with timings.interval('maxh_wflyrs'):
+                gridding_methods.maxH_workflow_layers(
+                    row, col, binChunk["X"], binChunk["Y"],
+                    heightAboveGround, pntIntensity, binChunk["CLASSIFICATION"],
+                    xArr, yArr, zArr, intensityAtMaxH, haveGroundReturn)
 
             # nonGroundClasses is most common non-ground class in each pixel
             classCountsNonGround = np.copy(classCounts)
@@ -391,9 +413,10 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
                 binChunk["CLASSIFICATION"] == const.PTCLASS_HIGHVEGETATION
             )  # could drop / add classification value of 3 (i.e. low veg)
             if number_veg_rets > 10:
-                (row_chm, col_chm) = gridding_methods.xyToRowCol(
-                    binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
-                    cmdargs.chm_pixsize)
+                with timings.interval('csm_xytorowcol'):
+                    (row_chm, col_chm) = gridding_methods.xyToRowCol(
+                        binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
+                        cmdargs.chm_pixsize)
                 nRows_chm = int(np.ceil(binSize / cmdargs.chm_pixsize))
                 nCols_chm = int(np.ceil(binSize / cmdargs.chm_pixsize))
                 xst_chm = int(
@@ -405,23 +428,26 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
 
                 maxH_hag = np.full((nRows_chm, nCols_chm), nullVal,
                                    dtype=np.float32)
-                gridding_methods.maxH_array(row_chm, col_chm,
-                    heightAboveGround, maxH_hag)
+                with timings.interval('maxh_array'):
+                    gridding_methods.maxH_array(row_chm, col_chm,
+                        heightAboveGround, maxH_hag)
                 maxH_vals = (
                     chunk["CLASSIFICATION"] <= const.PTCLASS_HIGHVEGETATION
                 )  # this includes unclassified returns.. not sure of zero?
-                chunk_hag = gridding_methods.createHeightAboveGround(
-                    maxH_vals, chunk["X"], chunk["Y"], chunk["Z"],
-                    chunk["X"][grdhits], chunk["Y"][grdhits], chunk["Z"][grdhits])
+                with timings.interval('heightaboveground_binwithnbrs'):
+                    chunk_hag = gridding_methods.createHeightAboveGround(
+                        maxH_vals, chunk["X"], chunk["Y"], chunk["Z"],
+                        chunk["X"][grdhits], chunk["Y"][grdhits], chunk["Z"][grdhits])
                 vals = np.logical_and(
                     chunk["CLASSIFICATION"] >= const.PTCLASS_LOWVEGETATION,
                     chunk["CLASSIFICATION"] <= const.PTCLASS_HIGHVEGETATION,
                 )
                 if np.sum(vals) > 5:
-                    chmVeg = gridding_methods.chm_alg(
-                        chunk[vals], chunk_hag[vals], maxH_hag,
-                        cmdargs.chm_pixsize, xst_bin, yst_bin,
-                        binSize, nRows_chm, nCols_chm, nullVal)
+                    with timings.interval('chm_alg'):
+                        chmVeg = gridding_methods.chm_alg(
+                            chunk[vals], chunk_hag[vals], maxH_hag,
+                            cmdargs.chm_pixsize, xst_bin, yst_bin,
+                            binSize, nRows_chm, nCols_chm, nullVal)
                     chmTile[
                         yst_chm : (yst_chm + nRows_chm),
                         xst_chm : (xst_chm + nCols_chm),
@@ -432,21 +458,24 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
             density = np.zeros((nRowsPerBin, nColsPerBin), dtype=np.uint32)
             fstR = binChunk["RETURN_NUMBER"] == 1
             if np.sum(fstR) > 0:
-                (row_1st, col_1st) = gridding_methods.xyToRowCol(
-                    binChunk["X"][fstR], binChunk["Y"][fstR],
-                    xst_bin, yst_bin, cmdargs.pixsize)
-                gridding_methods.fstR_density(
-                    row_1st, col_1st,
-                    binChunk["X"][fstR], binChunk["Y"][fstR],
-                    density)
+                with timings.interval('fstr_xytorowcol'):
+                    (row_1st, col_1st) = gridding_methods.xyToRowCol(
+                        binChunk["X"][fstR], binChunk["Y"][fstR],
+                        xst_bin, yst_bin, cmdargs.pixsize)
+                with timings.interval('fstr_density'):
+                    gridding_methods.fstR_density(
+                        row_1st, col_1st,
+                        binChunk["X"][fstR], binChunk["Y"][fstR],
+                        density)
                 ptDenTile[binSlice] = density
             ############################
             # run percentiles
-            (percentile_arr, nRows_pct) = (
-                gridding_methods.doHeightPercentileOutputs_idx(
-                    binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
-                    binSize, heightAboveGround, cmdargs.pcntile_pixsize,
-                    pptiles=percentiles, nullVal=nullVal))
+            with timings.interval('hgtpcntiles'):
+                (percentile_arr, nRows_pct) = (
+                    gridding_methods.doHeightPercentileOutputs_idx(
+                        binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
+                        binSize, heightAboveGround, cmdargs.pcntile_pixsize,
+                        pptiles=percentiles, nullVal=nullVal))
             xst_pct = int(int((binCol - 1) * binSize) / cmdargs.pcntile_pixsize)
             yst_pct = int(int((numBinRows - binRow) * binSize) / cmdargs.pcntile_pixsize)
             pctTile[
@@ -462,13 +491,15 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
             nRows_fpc = int(np.ceil(binSize / cmdargs.fpc_pixsize))
             # nCols_fpc = int(np.ceil(binSize / cmdargs.fpc_pixsize))
 
-            flightlines = fpc_method.check_pts_pulses(binChunk)
+            with timings.interval('flightlines'):
+                flightlines = fpc_method.check_pts_pulses(binChunk)
             canopyThreshold = 1.7
             hag = heightAboveGround
 
-            fpc = fpc_method.doFPC(xst_bin, yst_bin, binChunk,
-                flightlines, hag, cmdargs.fpc_pixsize,
-                binSize, cmdargs.split_fpc, canopyThreshold)
+            with timings.interval('fpc'):
+                fpc = fpc_method.doFPC(xst_bin, yst_bin, binChunk,
+                    flightlines, hag, cmdargs.fpc_pixsize,
+                    binSize, cmdargs.split_fpc, canopyThreshold)
             fpcTile[
                 yst_fpc : (yst_fpc + nRows_fpc),
                 xst_fpc : (xst_fpc + nRows_fpc),
@@ -730,6 +761,22 @@ def checkOutfilesExist(outfnames):
             allExist = False
 
     return allExist
+
+
+def reportTimings(timings):
+    """
+    Print a report to stdout on elapsed time for a range of different code segments.
+    """
+    summaryDict = timings.makeSummaryDict()
+    print("\nTimings\n-------")
+    maxKeyLen = max([len(k) for k in list(summaryDict.keys())])
+    timeList = [summaryDict[k]['total'] for k in summaryDict]
+    maxTime = max(timeList)
+    nDec = 2        # num decimal places
+    width = int(np.ceil((np.log10(maxTime)))) + nDec + 1
+    fmt = "{{:{}s}} {{:{}.{}f}} sec".format(maxKeyLen, width, nDec)
+    for k in summaryDict:
+        print(fmt.format(k, summaryDict[k]['total']))
 
 
 ###############################################################################################
