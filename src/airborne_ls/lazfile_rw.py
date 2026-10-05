@@ -28,6 +28,280 @@ from airborne_ls import filenaming_methods, qvf, const
 logger = logging.getLogger(__name__)
 
 
+class LazNdx:
+    """
+    Hold the data from our simple square-bin index, as read in from the VLRs
+    """
+    def __init__(self, filehandle):
+        """
+        Read the index from the open file
+
+        Parameters:
+          filehandle (laspy.lasreader.LasReader): Open LAS file
+        """
+        binInfoVlr = binBoundsVlr = None
+
+        vlrs = filehandle.header.vlrs
+        binInfoList = vlrs.get_by_id(user_id=const.VLR_USERID_JRSRP,
+                                     record_ids=[const.VLR_RECORDID_BINSIZE])
+        if len(binInfoList) > 0:
+            binInfoVlr = binInfoList[0]
+            binBoundsList = vlrs.get_by_id(user_id=const.VLR_USERID_JRSRP,
+                                           record_ids=[const.VLR_RECORDID_BINBOUNDS])
+            binBoundsVlr = binBoundsList[0]
+            oldVlrs = False
+        else:
+            # Old non-conformant VLRs
+            for vlr in vlrs:
+                if vlr.user_id == "BINSIZE":
+                    # VLR containing binSize and nbins
+                    binInfoVlr = vlr
+                elif vlr.user_id == "BIN_POS":
+                    # VLR containing bin positions
+                    binBoundsVlr = vlr
+            oldVlrs = True
+
+        if binInfoVlr is None or binBoundsVlr is None:
+            raise ValueError("Unable to find bin index VLRs in file")
+
+        # Unpack binSize and nbins
+        binInfoFormat = "<dQ"
+        if oldVlrs:
+            binInfoFormat = "2d"
+        binSize, nBins = struct.unpack(binInfoFormat, binInfoVlr.record_data)
+
+        if nBins > 1:
+            numElements = int(nBins + 1)
+            binIndexFormat = f"<{numElements}Q"
+            if oldVlrs:
+                binIndexFormat = f"{numElements}d"
+            binBounds = struct.unpack(binIndexFormat, binBoundsVlr.record_data)
+            binBounds = np.array(binBounds, dtype=np.int32)
+        else:
+            raise ValueError("Failed to import laz binning index")
+
+        self.binSize = binSize
+        self.nBins = nBins
+        self.binBounds = binBounds
+
+
+class BinnedData:
+    """
+    Hold the point data from a LAZ file, divided into bins as-per the index
+    """
+    def __init__(self, filename, row=None, col=None):
+        """
+        Open the file, and read data into binned structure. Limit to nominated row or
+        col if required. If both row and col are given, then only the intersecting bin
+        is loaded.
+        """
+        f = laspy.open(filename)
+        self.ndx = LazNdx(f)
+        self.dataByBin = {}
+        # We assume that tiles are always square, and thus same number of bin rows as cols
+        self.numBinRows = int(np.round(np.sqrt(self.ndx.nBins)))
+        self.numBinCols = self.numBinRows
+
+        # We read the whole dataset in. I would love to be able to just read in the points
+        # we need, but the compression scheme makes this complicated. Doing it the obvious
+        # way ends up taking longer than just reading the whole lot in.
+        # The data is in the form of our numpy recarray structure.
+        data = self.laspy2rec(f.read())
+
+        # Split the data into the desired bins
+        if row is None and col is None:
+            for r in range(self.numBinRows):
+                for c in range(self.numBinCols):
+                    binNum = self.makeBinNum(r, c)
+                    i1 = self.ndx.binBounds[binNum]
+                    i2 = self.ndx.binBounds[binNum + 1]
+                    self.setData(r, c, data[i1:i2])
+        elif row is not None and col is None:
+            for c in range(self.numBinCols):
+                binNum = self.makeBinNum(row, c)
+                i1 = self.ndx.binBounds[binNum]
+                i2 = self.ndx.binBounds[binNum + 1]
+                self.setData(row, c, data[i1:i2])
+        elif col is not None and row is None:
+            for r in range(self.numBinRows):
+                binNum = self.makeBinNum(r, col)
+                i1 = self.ndx.binBounds[binNum]
+                i2 = self.ndx.binBounds[binNum + 1]
+                self.setData(r, col, data[i1:i2])
+        else:
+            binNum = self.makeBinNum(row, col)
+            i1 = self.ndx.binBounds[binNum]
+            i2 = self.ndx.binBounds[binNum + 1]
+            self.setData(row, col, data[i1:i2])
+
+        del data
+
+    @staticmethod
+    def laspy2rec(data):
+        """
+        Convert from laspy's point record laspy.lasdata.LasData strusture into our own
+        homegrown numpy recarray. This holds only the columns we want to use, and is
+        more memory-efficient. It also allows copying of sub-arrays, allowing us to
+        easily split into bins.
+
+        Parameters:
+          data (LasData): Points read directly from file
+
+        Returns:
+          (numpy recarray): Custom record array of point data
+        """
+        recarray = np.rec.fromarrays(
+            [
+                data.return_num,
+                data.num_returns,
+                data.gps_time,
+                data.intensity,
+                data.classification,
+                data.x,
+                data.y,
+                data.z,
+            ],
+            names=[
+                "RETURN_NUMBER",
+                "NUMBER_OF_RETURNS",
+                "TIMESTAMP",
+                "INTENSITY",
+                "CLASSIFICATION",
+                "X",
+                "Y",
+                "Z",
+            ],
+            formats=["u1", "u1", "<f8", "<i4", "u1", "<f8", "<f8", "<f8"],
+        )
+        return recarray
+
+    @staticmethod
+    def makeBinName(r, c):
+        """
+        Return internal bin name for given bin row/col.
+        Top-left bin is (r, c) == (0, 0)
+        """
+        return f"row_{r}_col_{c}"
+
+    def makeBinNum(self, r, c):
+        """
+        Return internal bin number for given bin row/col.
+        Top-left bin is (r, c) == (0, 0)
+        """
+        return r * self.numBinCols + c
+
+    def getData(self, row, col):
+        """
+        Return the point data for the nominated bin.
+        Top-left bin is (r, c) == (0, 0)
+        """
+        binName = self.makeBinName(row, col)
+        return self.dataByBin.get(binName, None)
+
+    def setData(self, r, c, data):
+        """
+        Set the given point data for the nominated bin row/col.
+        Top-left bin is (r, c) == (0, 0)
+
+        Parameters:
+          r, c (int): Row/col of nominated bin (row zero is top row)
+          data (numpy recarray): Point data for this bin
+        """
+        binName = self.makeBinName(r, c)
+        self.dataByBin[binName] = np.copy(data)
+
+    def numBins(self):
+        """
+        Return total number of bins stored in this instance
+        """
+        return len(self.dataByBin)
+
+    def numPoints(self):
+        """
+        Return total number of points stored in this instance (all points for
+        all bins)
+        """
+        return sum([len(self.dataByBin[k]) for k in self.dataByBin])
+
+    def mergeNeighbour(self, other, direction):
+        """
+        Merge the given 'other' instance into the current one. Direction is from the perspective
+        of the central tile, so 'NW' means that 'other' lies to the north-west of the central tile
+        We copy over just the immediate next bin(s), according to direction.
+        """
+        numBinRows = self.numBinRows
+        numBinCols = self.numBinCols
+        otherNrows = other.numBinRows
+        otherNcols = other.numBinCols
+        if otherNrows != numBinRows or otherNcols != numBinCols:
+            raise ValueError("Bin row/col count mis-match")
+
+        if direction == 'SW':
+            self.setData(numBinRows, -1, other.getData(0, otherNcols - 1))
+        elif direction == 'S':
+            for c in range(numBinCols):
+                self.setData(numBinRows, c, other.getData(0, c))
+        elif direction == 'SE':
+            self.setData(numBinRows, numBinCols, other.getData(0, 0))
+        elif direction == 'W':
+            for r in range(numBinRows):
+                self.setData(r, -1, other.getData(r, otherNcols - 1))
+        elif direction == 'E':
+            for r in range(numBinRows):
+                self.setData(r, numBinCols, other.getData(r, 0))
+        elif direction == 'NW':
+            self.setData(-1, -1, other.getData(otherNrows - 1, otherNcols - 1))
+        elif direction == 'N':
+            for c in range(numBinCols):
+                self.setData(-1, c, other.getData(otherNrows - 1, c))
+        elif direction == 'NE':
+            self.setData(-1, numBinCols, other.getData(otherNrows - 1, 0))
+
+
+def readBinnedData(filename, tileSize=None, withNeighbours=False):
+    """
+    Read point data from the given LAZ file, divide into bins according to the stored index
+
+    Parameters:
+      filename (str): Name of LAZ file to read
+      tileSize (float): Size (i.e. length of side) (metres) of tile in the file
+      withNeighbours (bool): If True, also read data from neighbouring bins in
+                             all 8 neighbouring tiles (wherever available). Assumes
+                             our standard internal file naming.
+
+    Returns:
+      (BinnedData): The data for the tile, binned by the index
+    """
+    if withNeighbours and (tileSize is None):
+        raise ValueError("withNeighbours requires tileSize")
+
+    binnedData = BinnedData(filename)
+    if withNeighbours:
+        offsetByDirection = {
+            'SW': (-tileSize, -tileSize), 'S': (0, -tileSize), 'SE': (tileSize, -tileSize),
+            'W': (-tileSize, 0), 'E': (tileSize, 0),
+            'NW': (-tileSize, tileSize), 'N': (0, tileSize), 'NE': (tileSize, tileSize)
+        }
+        rowColToRequest = {
+            'SW': (0, binnedData.numBinCols - 1), 'S': (0, None), 'SE': (0, 0),
+            'W': (None, binnedData.numBinCols - 1), 'E': (None, 0),
+            'NW': (binnedData.numBinRows - 1, binnedData.numBinCols - 1),
+            'N': (binnedData.numBinRows - 1, None), 'NE': (binnedData.numBinRows - 1, 0)
+        }
+        where = qvf.getwhere(filename)
+        for direction in offsetByDirection:
+            (xOffset, yOffset) = offsetByDirection[direction]
+
+            nbrWhere = filenaming_methods.neighbourTileWhere(where, xOffset, yOffset)
+            nbrFilename = qvf.setwhere(filename, nbrWhere)
+            if os.path.exists(nbrFilename):
+                (row, col) = rowColToRequest[direction]
+                nbrBinnedData = BinnedData(nbrFilename, row=row, col=col)
+                binnedData.mergeNeighbour(nbrBinnedData, direction)
+
+    return binnedData
+
+
 ###################################################################################################
 def laspy2rec(infile):
     """
