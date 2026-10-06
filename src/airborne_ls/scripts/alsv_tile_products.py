@@ -306,13 +306,13 @@ def processOneBin(binRow, binCol, cmdargs, binSize, binnedData, neigh8, easting,
       fpcTile : Output array for Foliage Projective Cover
       timings (Timers): A Timers object to record timings
     """
-    binTopLeftX = easting + binSize * (binCol - 1)
-    binTopLeftY = northing - cmdargs.tilesize + binSize * binRow
+    binTopLeftX = easting + binSize * binCol
+    binTopLeftY = northing - binSize * binRow
     binChunk = binnedData.getData(binRow, binCol)
     chunk = binnedData.getData(binRow, binCol)
     if len(chunk) > 10:
         for n8 in neigh8:
-            (nbrBinRow, nbrBinCol) = (binRow + n8[0], binCol + n8[1])
+            (nbrBinRow, nbrBinCol) = (int(binRow + n8[0]), int(binCol + n8[1]))
             nbrBinData = binnedData.getData(nbrBinRow, nbrBinCol)
             if nbrBinData is not None:
                 with timings.interval('trimnbrbins'):
@@ -649,8 +649,8 @@ def trimNeighbourBin(data, binRowOff, binColOff, binMargin, topLeftX, topLeftY, 
 
     Bin row/col offsets define which neighbour direction this bin lies from the
     central bin. They were added to the bin row/col number to get the neighour bin
-    row/col. The LAZ file point index as presented with row/col numbering starting
-    at 1 in the bottom-left bin, and increasing eastwards and northwards.
+    row/col. The LAZ file point index as presented with bin row/col numbering starting
+    at 0 for the top-left bin of the tile, and increasing eastwards and southwards.
 
     Parameters:
       data: Point data for the whole of the bin to be trimmed
@@ -679,9 +679,9 @@ def trimNeighbourBin(data, binRowOff, binColOff, binMargin, topLeftX, topLeftY, 
         elif binColOff == 1:
             dist = x - (topLeftX + binSize)
         elif binRowOff == -1:
-            dist = topLeftY - binSize - y
-        elif binRowOff == 1:
             dist = y - topLeftY
+        elif binRowOff == 1:
+            dist = topLeftY - binSize - y
     else:
         # The coordinate to select on is distance from the corner point, rather than a single
         # coordinate. Use the offset values to work out the corner (X, Y) coords, then
@@ -690,7 +690,7 @@ def trimNeighbourBin(data, binRowOff, binColOff, binMargin, topLeftX, topLeftY, 
         if binColOff == 1:
             cnrX = topLeftX + binSize
         cnrY = topLeftY
-        if binRowOff == -1:
+        if binRowOff == 1:
             cnrY = topLeftY - binSize
 
         # The Euclidean distance is the "coordinate" on which we will select points
