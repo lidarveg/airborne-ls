@@ -44,6 +44,7 @@ from airborne_ls import (
     fpc_method,
     gridding_methods,
     lazfile_rw,
+    qvf,
     rw_image_methods,
     timinghooks
 )
@@ -163,8 +164,9 @@ def run_tile_products(cmdargs):
     timings = timinghooks.Timers()
 
     # Read the first file to get bin size and number of bins
-    with timings.interval('readlaz'):
-        (binSize, nbins, _, _) = lazfile_rw.read_laz_index(infilelist[0], cmdargs.tilesize)
+    ndx0 = lazfile_rw.LazNdx(laspy.open(infilelist[0]))
+    nbins = ndx0.nBins
+    binSize = ndx0.binSize
 
     logger.info(f"binSize = {binSize} and nbins = {nbins} for {infilelist[0]}")
 
@@ -221,9 +223,10 @@ def run_tile_products(cmdargs):
             # read in point data for the tile
             # allDataByBin stores the point data in chunks/bins for rapid access
             with timings.interval('readbindata'):
-                (allDataByBin, northing, easting, numBinRows) = lazfile_rw.bin_data(
-                    infileFull, cmdargs.tilesize, nbins)
-            numBinCols = numBinRows
+                binnedData = lazfile_rw.readBinnedData(infileFull,
+                    tileSize=cmdargs.tilesize, withNeighbours=True)
+            where = qvf.getwhere(infileFull)
+            (easting, northing, utmZone) = filenaming_methods.decomposeWhereField(where)
 
             logger.info(f"Indexed LAZ FILE read in for {infileFull}")
 
@@ -231,15 +234,15 @@ def run_tile_products(cmdargs):
             nRowsPerBin = int(np.ceil(binSize / cmdargs.pixsize))
             nColsPerBin = int(np.ceil(binSize / cmdargs.pixsize))
 
-            for binRow in range(1, numBinRows + 1):
-                for binCol in range(1, numBinCols + 1):
+            for binRow in range(0, binnedData.numBinRows):
+                for binCol in range(0, binnedData.numBinCols):
                     with timings.interval('total_processing'):
-                        processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8,
-                            easting, northing, nRowsPerBin, nColsPerBin, nullVal, numBinRows,
+                        processOneBin(binRow, binCol, cmdargs, binSize, binnedData, neigh8,
+                            easting, northing, nRowsPerBin, nColsPerBin, nullVal,
                             demTile, csmTile, chmTile, maxhTile, intensTile, ptDenTile, grTile,
                             non_grTile, pctTile, fpcTile, timings)
 
-            del allDataByBin
+            del binnedData
 
             with timings.interval('write_rasters'):
                 writeOutputRasters(cmdargs, epsg, outfnames, easting, northing, nullVal,
@@ -269,8 +272,8 @@ def run_tile_products(cmdargs):
         reportTimings(timings)
 
 
-def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, easting, northing,
-        nRowsPerBin, nColsPerBin, nullVal, numBinRows, demTile, csmTile, chmTile, maxhTile,
+def processOneBin(binRow, binCol, cmdargs, binSize, binnedData, neigh8, easting, northing,
+        nRowsPerBin, nColsPerBin, nullVal, demTile, csmTile, chmTile, maxhTile,
         intensTile, ptDenTile, grTile, non_grTile, pctTile, fpcTile, timings):
     """
     Do all calculation for a single index bin. Fills in the pixels for the bin
@@ -285,12 +288,12 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
                             bin coordinate scheme, row 1 is southern-most.
       cmdargs (argparse.Namespace): The command arguments object
       binSize (float): Size of bin edge (metres)
+      binnedData (BinnedData): All data, accessible by bin
       neigh8 (array): 1/0/-1 values for offset to 8 neighbouring bins
       easting, northing (float): Coordinates (metres) of top-left corner of the
                                  whole tile
       nRowsPerBin, nColsPerBin (int): Number of rows & cols of standard pixels in each bin
       nullVal (float): Null value for most of the arrays
-      numBinRows (int): Number of rows of bins in the whole tile
       demTile : Output array for ground DEM
       csmTile : Output array for Canopy Surface Model
       chmTile : Output array for Canopy Height Model
@@ -303,16 +306,15 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
       fpcTile : Output array for Foliage Projective Cover
       timings (Timers): A Timers object to record timings
     """
-    binKey = f"row_{binRow}_col_{binCol}"
-    binTopLeftX = easting + binSize * (binCol - 1)
-    binTopLeftY = northing - cmdargs.tilesize + binSize * binRow
-    binChunk = np.copy(allDataByBin[binKey])  # reset as we don't need buffer
-    chunk = np.copy(allDataByBin[binKey])
+    binTopLeftX = easting + binSize * binCol
+    binTopLeftY = northing - binSize * binRow
+    binChunk = binnedData.getData(binRow, binCol)
+    chunk = binnedData.getData(binRow, binCol)
     if len(chunk) > 10:
         for n8 in neigh8:
-            nbrBinKey = f"row_{int(binRow + n8[0])}_col_{int(binCol + n8[1])}"
-            nbrBinData = np.copy(allDataByBin[nbrBinKey])
-            if (nbrBinData.shape)[0] > 1:
+            (nbrBinRow, nbrBinCol) = (int(binRow + n8[0]), int(binCol + n8[1]))
+            nbrBinData = binnedData.getData(nbrBinRow, nbrBinCol)
+            if nbrBinData is not None:
                 with timings.interval('trimnbrbins'):
                     nbrBinData = trimNeighbourBin(nbrBinData, n8[0], n8[1],
                         cmdargs.binmargin, binTopLeftX, binTopLeftY, binSize)
@@ -323,12 +325,12 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
         if np.sum(grdhits) > 10:
             # Set up a slice object for the part of the main tile arrays
             # covering the current bin. Applies only to arrays of tileShape
-            xst = int(int((binCol - 1) * binSize) / cmdargs.pixsize)
-            yst = int(int((numBinRows - binRow) * binSize) / cmdargs.pixsize)
+            xst = int(int(binCol * binSize) / cmdargs.pixsize)
+            yst = int(int(binRow * binSize) / cmdargs.pixsize)
             binSlice = (slice(yst, (yst + nRowsPerBin)), slice(xst, (xst + nColsPerBin)))
 
-            xst_bin = easting + int((binCol - 1) * binSize)
-            yst_bin = northing - int((numBinRows - binRow) * binSize)
+            xst_bin = easting + int(binCol * binSize)
+            yst_bin = northing - int(binRow * binSize)
             if np.sum(grdhits) > 0:
                 with timings.interval('makedemtile'):
                     dem = gridding_methods.makeDemTile(
@@ -420,12 +422,8 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
                         cmdargs.chm_pixsize)
                 nRows_chm = int(np.ceil(binSize / cmdargs.chm_pixsize))
                 nCols_chm = int(np.ceil(binSize / cmdargs.chm_pixsize))
-                xst_chm = int(
-                    int((binCol - 1) * binSize) / cmdargs.chm_pixsize
-                )
-                yst_chm = int(
-                    int((numBinRows - binRow) * binSize) / cmdargs.chm_pixsize
-                )
+                xst_chm = int(binCol * (binSize / cmdargs.chm_pixsize))
+                yst_chm = int(binRow * (binSize / cmdargs.chm_pixsize))
 
                 maxH_hag = np.full((nRows_chm, nCols_chm), nullVal,
                                    dtype=np.float32)
@@ -477,8 +475,8 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
                         binChunk["X"], binChunk["Y"], xst_bin, yst_bin,
                         binSize, heightAboveGround, cmdargs.pcntile_pixsize,
                         pptiles=percentiles, nullVal=nullVal))
-            xst_pct = int(int((binCol - 1) * binSize) / cmdargs.pcntile_pixsize)
-            yst_pct = int(int((numBinRows - binRow) * binSize) / cmdargs.pcntile_pixsize)
+            xst_pct = int(int(binCol * binSize) / cmdargs.pcntile_pixsize)
+            yst_pct = int(int(binRow * binSize) / cmdargs.pcntile_pixsize)
             pctTile[
                 :,
                 yst_pct : (yst_pct + nRows_pct),
@@ -487,8 +485,8 @@ def processOneBin(binRow, binCol, cmdargs, binSize, allDataByBin, neigh8, eastin
 
             ############################
             # run FPC
-            xst_fpc = int(int((binCol - 1) * binSize) / cmdargs.fpc_pixsize)
-            yst_fpc = int(int((numBinRows - binRow) * binSize) / cmdargs.fpc_pixsize)
+            xst_fpc = int(int(binCol * binSize) / cmdargs.fpc_pixsize)
+            yst_fpc = int(int(binRow * binSize) / cmdargs.fpc_pixsize)
             nRows_fpc = int(np.ceil(binSize / cmdargs.fpc_pixsize))
             # nCols_fpc = int(np.ceil(binSize / cmdargs.fpc_pixsize))
 
@@ -651,8 +649,8 @@ def trimNeighbourBin(data, binRowOff, binColOff, binMargin, topLeftX, topLeftY, 
 
     Bin row/col offsets define which neighbour direction this bin lies from the
     central bin. They were added to the bin row/col number to get the neighour bin
-    row/col. The LAZ file point index as presented with row/col numbering starting
-    at 1 in the bottom-left bin, and increasing eastwards and northwards.
+    row/col. The LAZ file point index as presented with bin row/col numbering starting
+    at 0 for the top-left bin of the tile, and increasing eastwards and southwards.
 
     Parameters:
       data: Point data for the whole of the bin to be trimmed
@@ -681,9 +679,9 @@ def trimNeighbourBin(data, binRowOff, binColOff, binMargin, topLeftX, topLeftY, 
         elif binColOff == 1:
             dist = x - (topLeftX + binSize)
         elif binRowOff == -1:
-            dist = topLeftY - binSize - y
-        elif binRowOff == 1:
             dist = y - topLeftY
+        elif binRowOff == 1:
+            dist = topLeftY - binSize - y
     else:
         # The coordinate to select on is distance from the corner point, rather than a single
         # coordinate. Use the offset values to work out the corner (X, Y) coords, then
@@ -692,7 +690,7 @@ def trimNeighbourBin(data, binRowOff, binColOff, binMargin, topLeftX, topLeftY, 
         if binColOff == 1:
             cnrX = topLeftX + binSize
         cnrY = topLeftY
-        if binRowOff == -1:
+        if binRowOff == 1:
             cnrY = topLeftY - binSize
 
         # The Euclidean distance is the "coordinate" on which we will select points
