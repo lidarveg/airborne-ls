@@ -527,6 +527,9 @@ def read_laz_index(infile, tile_s):
 
     Reads the binning index from a LAS/LAZ file.
 
+    Note that this function is obsolete, and is inconsistent with BinnedData and
+    associated classes. Please see readBinnedData().
+
     Returns:
     - binSize: The size of each bin.
     - nbins: The number of bins.
@@ -634,6 +637,9 @@ def bin_data(infile, tile_s, nbins):
     """
     Process LAS/LAZ files by binning data into a grid structure.
 
+    Note that this function is obsolete, and is inconsistent with BinnedData and
+    associated classes. Please see readBinnedData().
+
     Parameters:
         infile (str): Name of the input LAS/LAZ file to process.
         tile_s (int): Tile size.
@@ -697,6 +703,9 @@ def bin_data(infile, tile_s, nbins):
 def get_bin_indices(nbins, tile_s):
     """
     Generate indices for bins of surrounding eight LAS/LAZ tiles for processing.
+
+    Note that this function is obsolete, and is inconsistent with BinnedData and
+    associated classes. Please see readBinnedData().
 
     Parameters:
         nbins (int): Total number of bins in the tile.
