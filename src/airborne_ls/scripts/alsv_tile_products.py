@@ -108,7 +108,8 @@ def getCmdargs(inputargs):
 
     # File processing options
     parser.add_argument("--split_fpc", default=False, action=argparse.BooleanOptionalAction,
-        help="Split flight lines for FPC calculations.")
+        help=("Split flight lines for FPC calculations. This option is currently disabled, " +
+              "until we work out the wrinkles."))
     parser.add_argument("--binmargin", type=int, default=33,
         help=("Percentage of points from neighbouring bins to keep for per-bin " +
             "DEM interpolation (default=%(default)s). Smaller values will run faster, " +
@@ -133,6 +134,10 @@ def getCmdargs(inputargs):
     if cmdargs.indir is None and cmdargs.groupMofN is not None:
         msg = "Using --groupMofN requires --indir"
         raise ValueError(msg)
+
+    if cmdargs.split_fpc:
+        print("Warning: The --split_fpc option is currently disabled\n")
+        cmdargs.split_fpc = False
 
     return cmdargs
 
