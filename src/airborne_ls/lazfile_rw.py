@@ -371,7 +371,7 @@ def laspy2rec(infile):
 
 
 ###################################################################################################
-def standardise_lasf(what, when, utmZone, stageCode, projectName, outdir,
+def standardise_lasf(what, when, utmZone, projectionCode, stageCode, projectName, outdir,
         data, easting, northing, tile_s, out_tile_s, binSize, filename_Parent,
         classesToExclude, minZ, maxZ, skipexisting):
     """
@@ -382,6 +382,7 @@ def standardise_lasf(what, when, utmZone, stageCode, projectName, outdir,
         what (str): The 'what' field of output filename
         when (str): The 'when' field of output filename
         utmZone (int): UTM zone number of projection for output files
+        projectionCode (str): Projection code for output file names
         stageCode (str): 3-char stage code for output files
         projectName (str): 6-char name of data project
         outdir (str): Output directory for processed files.
@@ -401,7 +402,6 @@ def standardise_lasf(what, when, utmZone, stageCode, projectName, outdir,
     """
     segments = np.arange(0, int(tile_s), int(out_tile_s))
 
-    projectionCode = qvf.makeProjectionCode(utmZone)
     stageAndZone = f"{stageCode}{projectionCode}"
     outfileTemplate = qvf.assemblefields([what, 'TILENAME', when, stageAndZone])
     outfileTemplate = qvf.setoptionfield(outfileTemplate, 'p', projectName)

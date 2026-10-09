@@ -5,6 +5,11 @@ file names.
 """
 import os
 
+from osgeo import osr
+
+
+osr.UseExceptions()
+
 
 def isQvf(fullpath):
     """
@@ -193,13 +198,30 @@ def makeTileWhere(x, y, utmZone):
     return where
 
 
-def makeProjectionCode(utmZone):
+def makeProjectionCode(epsg):
     """
-    Make a QVF-style projection code for the given UTM zone
+    Make a QVF-style projection code for the given EPSG number
     """
+    projCode = None
+
+    sr = osr.SpatialReference()
+    sr.ImportFromEPSG(epsg)
+    utmZone = sr.GetUTMZone()
     if utmZone != 0:
         zoneNum = abs(utmZone)
         if 50 <= zoneNum <= 56:
             zoneNum = zoneNum - 50
-        projCode = f"m{zoneNum}"
+        epsgPrefix = epsg - abs(utmZone)
+
+        # Start with the generic WGS84 UTM
+        utmCode = "u"
+        if epsgPrefix == 28300:
+            # GDA94
+            utmCode = "m"
+        elif epsgPrefix == 7800:
+            # GDA2020
+            utmCode = "d"
+
+        projCode = f"{utmCode}{zoneNum}"
+
     return projCode

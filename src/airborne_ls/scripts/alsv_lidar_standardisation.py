@@ -37,7 +37,7 @@ import numpy as np
 from osgeo import osr
 import pyproj
 
-from airborne_ls import lazfile_rw, const, filenaming_methods
+from airborne_ls import lazfile_rw, const, filenaming_methods, qvf
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(
@@ -198,16 +198,19 @@ def run_las_standardisation(cmdargs):
         msg = "No EPSG found in first infile. Please supply --epsg"
         raise ValueError(msg)
 
-    srs = osr.SpatialReference()
-    srs.ImportFromEPSG(cmdargs.epsg)
-    utmZone = srs.GetUTMZone()
-    if utmZone == 0:
-        msg = f"Unknown EPSG {cmdargs.epsg}. Cannot translate to filename zone code"
-        raise ValueError(msg)
-
     inTilesize = cmdargs.intilesize
     what = f"{cmdargs.ss}{cmdargs.ii}{cmdargs.pp}"
     when = f"{cmdargs.year}"
+
+    projectionCode = qvf.makeProjectionCode(cmdargs.epsg)
+    if projectionCode is None:
+        msg = f"Unknown EPSG {cmdargs.epsg}. Cannot translate to filename zone code"
+        raise ValueError(msg)
+    # Also need the UTM zone explicitly, because I am not very well organised
+    sr = osr.SpatialReference()
+    sr.ImportFromEPSG(cmdargs.epsg)
+    utmZone = sr.GetUTMZone()
+
     stageCode = getStageCode(cmdargs)
     classesToExclude = [int(i) for i in cmdargs.excludeclasses.split(',')]
 
@@ -230,10 +233,10 @@ def run_las_standardisation(cmdargs):
             np.floor(np.median(data.x[data.x > 0]) / inTilesize) * inTilesize)
 
         # Run chunked LAS filtering
-        lazfile_rw.standardise_lasf(what, when, utmZone, stageCode, cmdargs.project,
-            cmdargs.outdir, data, easting, northing, inTilesize, cmdargs.outtilesize,
-            cmdargs.binsize, inLazfile, classesToExclude, cmdargs.minz, cmdargs.maxz,
-            cmdargs.skipexisting)
+        lazfile_rw.standardise_lasf(what, when, utmZone, projectionCode, stageCode,
+            cmdargs.project, cmdargs.outdir, data, easting, northing, inTilesize,
+            cmdargs.outtilesize, cmdargs.binsize, inLazfile, classesToExclude,
+            cmdargs.minz, cmdargs.maxz, cmdargs.skipexisting)
 
         del data
 
