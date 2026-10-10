@@ -616,4 +616,166 @@ def chm_alg(chunk, chunk_hag, maxH_hag, psize, xst_bin, yst_bin, binSize, nRows,
     return outarr
 
 
+def getBinPtsWithMargin(binnedData, binRow, binCol, binMargin, binTopLeftX, binTopLeftY):
+    """
+    Get point data for the nominated bin, including a margin around it from
+    the neighbouring bins
+
+    Parameters:
+      binnedData (BinnedData): All point data, divided into square bins
+      binRow, binCol (int): Bin row and col to retrieve
+      binMargin (int): Percentage of points from neighbouring bins to include
+      binTopLeftX, binTopLeftY (float): (X, Y) coordinates of top-left corner of requested bin
+
+    Returns:
+      binPtsWithMarg (numpy recarray): Point data for bin and margin area
+    """
+    nbrOffsets = [[-1, 1], [0, 1], [1, 1], [-1, 0], [1, 0], [-1, -1], [0, -1], [1, -1]]
+
+    binSize = binnedData.ndx.binSize
+    binPtsWithMarg = binnedData.getData(binRow, binCol)
+    nbrsList = [binPtsWithMarg]
+    for (rowOff, colOff) in nbrOffsets:
+        (nbrBinRow, nbrBinCol) = (int(binRow + rowOff), int(binCol + colOff))
+        nbrBinData = binnedData.getData(nbrBinRow, nbrBinCol)
+        if nbrBinData is not None:
+            nbrBinData = trimNeighbourBin(nbrBinData, rowOff, colOff,
+                binMargin, binTopLeftX, binTopLeftY, binSize)
+            nbrsList.append(nbrBinData)
+    binPtsWithMarg = np.concatenate(nbrsList)
+    return binPtsWithMarg
+
+
+def trimNeighbourBin(data, binRowOff, binColOff, binMargin, topLeftX, topLeftY, binSize):
+    """
+    Trim off the points in a neighbouring bin, so that we are left with only
+    those points close to the central bin.
+
+    Bin row/col offsets define which neighbour direction this bin lies from the
+    central bin. They were added to the bin row/col number to get the neighour bin
+    row/col. The LAZ file point index as presented with bin row/col numbering starting
+    at 0 for the top-left bin of the tile, and increasing eastwards and southwards.
+
+    Parameters:
+      data: Point data for the whole of the bin to be trimmed
+      binRowOff, binColOff: Bin row & col offsets, relative to central bin
+      binMargin: Percentage of the data to keep in the trimmed data
+      topLeftX, topLeftY: (X, y) coordinates of the top-left corner of the
+                          central bin, in metres
+      binSize: Size of the bin (along one edge) in metres
+
+    Returns:
+      trimmedData: The subset of the given point data which lies closest
+                   to the central bin
+    """
+    # Point (X, Y) coords
+    x = data['X']
+    y = data['Y']
+
+    # There ar two main cases. In one case, we want the whole of one edge of the bin,
+    # on the other we want one corner of the bin. The first case will have one
+    # of the offset values equal to zero, the second case will have both non-zero
+    if 0 in (binRowOff, binColOff):
+        # Choose the coordinate (either X or Y) on which to select points. We calculate
+        # the perpendicular distance of each point from the relevant edge of the central bin
+        if binColOff == -1:
+            dist = topLeftX - x
+        elif binColOff == 1:
+            dist = x - (topLeftX + binSize)
+        elif binRowOff == -1:
+            dist = y - topLeftY
+        elif binRowOff == 1:
+            dist = topLeftY - binSize - y
+    else:
+        # The coordinate to select on is distance from the corner point, rather than a single
+        # coordinate. Use the offset values to work out the corner (X, Y) coords, then
+        # calculate Euclidean distance from that
+        cnrX = topLeftX
+        if binColOff == 1:
+            cnrX = topLeftX + binSize
+        cnrY = topLeftY
+        if binRowOff == 1:
+            cnrY = topLeftY - binSize
+
+        # The Euclidean distance is the "coordinate" on which we will select points
+        dist = np.sqrt((x - cnrX) ** 2 + (y - cnrY) ** 2)
+
+        # Adjust the binMargin because we only want the corner. In effect we square the proportion
+        binMargin = int(100 * (binMargin / 100) ** 2)
+
+    # A mask for the points with distance smaller than the given percentile
+    threshold = np.percentile(dist, binMargin)
+    keepMask = (dist < threshold)
+
+    trimmedData = data[keepMask]
+    return trimmedData
+
+
+def calcHeightAboveGroundAllBins(binnedData, binMargin, easting, northing):
+    """
+    Calculate Height Above Ground (HAG) for every point in the given data for one tile.
+
+    HAG is only evaluated for non-ground points, while all ground points
+    are assigned HAG == 0. The ground points are used to interpolate ground elevation
+    for (x, y) coords of every non-ground point, which is then subtracted from the Z
+    value for that point.
+
+    Point order is preserved in the resulting HAG array. The array does NOT include HAG
+    estiamtes for points outside the tile, even though points from neighbouring tiles
+    are included in the input (for interpolation of ground height).
+
+    Parameters:
+      binnedData (BinnedData): All point data for the tile, divided into square bins. Includes
+                               points from neighbouring bins in surrounding tiles
+      binMargin (int): Percentage of points in surrounding bins to include in ground interpolation
+      east, northing (float): Coordinates of tile top-left corner
+
+    Returns:
+      hag (numpy array): HAG values for every point in the tile (excludes points from
+                         surrounding tiles). Point order is preserved.
+    """
+    allHagList = []
+    binSize = binnedData.ndx.binSize
+    for binRow in range(0, binnedData.numBinRows):
+        for binCol in range(0, binnedData.numBinCols):
+            binTopLeftX = easting + binSize * binCol
+            binTopLeftY = northing - binSize * binRow
+
+            binPts = binnedData.getData(binRow, binCol)
+            binPtsWithMarg = getBinPtsWithMargin(binnedData, binRow, binCol,
+                binMargin, binTopLeftX, binTopLeftY)
+
+            # Select the ground points from the bin-with-margin data, so we tie down the
+            # edges for interpolation
+            groundMask = (binPtsWithMarg['CLASSIFICATION'] == const.PTCLASS_GROUND)
+            groundPts = binPtsWithMarg[groundMask]
+
+            # Select the non-ground points solely from with the bin itself, as we don't
+            # need to do the neighbouring bins here
+            nonGroundMask = (binPts['CLASSIFICATION'] != const.PTCLASS_GROUND)
+            nonGroundPts = binPts[nonGroundMask]
+            nonGroundXY = np.vstack((nonGroundPts['X'], nonGroundPts['Y'])).T
+
+            groundHeight = pynninterp.NaturalNeighbourPts(groundPts['X'], groundPts['Y'],
+                                                          groundPts['Z'], nonGroundXY)
+            hagNonGround = nonGroundPts['Z'] - groundHeight
+            # Remove NaN values, replace with zero (why zero ? I could not think of anything else.
+            # Should I have a nullVal defined for this ?)
+            hagNonGround[np.isnan(hagNonGround)] = 0
+            # Prevent any negative values. I am not at all sure about this, so it is currently
+            # disabled
+            # hagNonGround[hagNonGround < 0] = 0
+
+            # Populate HAG array for all points in the bin
+            hagBin = np.full(len(binPts), 0, dtype=binPts['Z'].dtype)
+            hagBin[nonGroundMask] = hagNonGround
+
+            # Append to list over all bins
+            allHagList.append(hagBin)
+
+    # HAG for all bins, preserving point order
+    hag = np.concatenate(allHagList)
+    return hag
+
+
 ###################################################################################################

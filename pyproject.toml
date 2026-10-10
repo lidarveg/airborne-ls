@@ -22,6 +22,7 @@ dependencies = [
 
 [project.scripts]
 alsv_lidar_standardisation = "airborne_ls.scripts.alsv_lidar_standardisation:main"
+alsv_addhag = "airborne_ls.scripts.alsv_addhag:main"
 alsv_tile_products = "airborne_ls.scripts.alsv_tile_products:main"
 alsv_dem_gapfill = "airborne_ls.scripts.alsv_dem_gapfill:main"
 alsv_product_mosaic = "airborne_ls.scripts.alsv_product_mosaic:main"
