@@ -17,6 +17,7 @@ import os
 import struct
 import sys
 import zipfile
+import tempfile
 from copy import copy
 from pathlib import Path
 
@@ -89,7 +90,7 @@ class BinnedData:
     """
     Hold the point data from a LAZ file, divided into bins as-per the index
     """
-    def __init__(self, filename, row=None, col=None):
+    def __init__(self, filename, row=None, col=None, includeHAG=True):
         """
         Open the file, and read data into binned structure. Limit to nominated row or
         col if required. If both row and col are given, then only the intersecting bin
@@ -106,7 +107,7 @@ class BinnedData:
         # we need, but the compression scheme makes this complicated. Doing it the obvious
         # way ends up taking longer than just reading the whole lot in.
         # The data is in the form of our numpy recarray structure.
-        data = self.laspy2rec(f.read())
+        data = self.laspy2rec(f.read(), includeHAG=includeHAG)
 
         # Split the data into the desired bins
         if row is None and col is None:
@@ -137,7 +138,7 @@ class BinnedData:
         del data
 
     @staticmethod
-    def laspy2rec(data):
+    def laspy2rec(data, includeHAG=True):
         """
         Convert from laspy's point record laspy.lasdata.LasData strusture into our own
         homegrown numpy recarray. This holds only the columns we want to use, and is
@@ -150,29 +151,37 @@ class BinnedData:
         Returns:
           (numpy recarray): Custom record array of point data
         """
-        recarray = np.rec.fromarrays(
-            [
-                data.return_num,
-                data.num_returns,
-                data.gps_time,
-                data.intensity,
-                data.classification,
-                data.x,
-                data.y,
-                data.z,
-            ],
-            names=[
-                "RETURN_NUMBER",
-                "NUMBER_OF_RETURNS",
-                "TIMESTAMP",
-                "INTENSITY",
-                "CLASSIFICATION",
-                "X",
-                "Y",
-                "Z",
-            ],
-            formats=["u1", "u1", "<f8", "<i4", "u1", "<f8", "<f8", "<f8"],
-        )
+        fieldList = [
+            data.return_num,
+            data.num_returns,
+            data.gps_time,
+            data.intensity,
+            data.classification,
+            data.x,
+            data.y,
+            data.z
+        ]
+        fieldNameList = [
+            "RETURN_NUMBER",
+            "NUMBER_OF_RETURNS",
+            "TIMESTAMP",
+            "INTENSITY",
+            "CLASSIFICATION",
+            "X",
+            "Y",
+            "Z"
+        ]
+        formats = ["u1", "u1", "f8", "i4", "u1", "f8", "f8", "f8"]
+
+        if includeHAG:
+            hag = getHagArray(data)
+            if hag is not None:
+                fieldList.append(hag)
+                fieldNameList.append("HAG")
+                formats.append("f4")
+
+        recarray = np.rec.fromarrays(fieldList, names=fieldNameList, formats=formats)
+
         return recarray
 
     @staticmethod
@@ -258,9 +267,12 @@ class BinnedData:
             self.setData(-1, numBinCols, other.getData(otherNrows - 1, 0))
 
 
-def readBinnedData(filename, tileSize=None, withNeighbours=False):
+def readBinnedData(filename, tileSize=None, withNeighbours=False, includeHAG=True):
     """
     Read point data from the given LAZ file, divide into bins according to the stored index
+
+    The data for each bin is a 1-d numpy recarray of all columns, preserving
+    point order within the bin.
 
     Parameters:
       filename (str): Name of LAZ file to read
@@ -275,7 +287,7 @@ def readBinnedData(filename, tileSize=None, withNeighbours=False):
     if withNeighbours and (tileSize is None):
         raise ValueError("withNeighbours requires tileSize")
 
-    binnedData = BinnedData(filename)
+    binnedData = BinnedData(filename, includeHAG=includeHAG)
     if withNeighbours:
         offsetByDirection = {
             'SW': (-tileSize, -tileSize), 'S': (0, -tileSize), 'SE': (tileSize, -tileSize),
@@ -296,7 +308,7 @@ def readBinnedData(filename, tileSize=None, withNeighbours=False):
             nbrFilename = qvf.setwhere(filename, nbrWhere)
             if os.path.exists(nbrFilename):
                 (row, col) = rowColToRequest[direction]
-                nbrBinnedData = BinnedData(nbrFilename, row=row, col=col)
+                nbrBinnedData = BinnedData(nbrFilename, row=row, col=col, includeHAG=includeHAG)
                 binnedData.mergeNeighbour(nbrBinnedData, direction)
 
     return binnedData
@@ -867,3 +879,88 @@ def run_zipf(fn, laz_flist, outdr, stagecode="ba2"):
         for lazfile in fns:
             zf.write(lazfile, arcname=Path(lazfile).name)
     print(f"{fn_out} zip file created: {archive_name}")
+
+
+def addHagEvlr(filename, hag):
+    """
+    Add HAG as EVLR, to the given LAS file
+
+    Parameters:
+      filename (str): Name of existing LAS/LAZ file
+      hag (numpy array): Array of values of height above ground, for every point
+                         in the file, in the same order
+    """
+    data = laspy.read(filename)
+    dirname = os.path.dirname(filename)
+    (fd, tmpfilename) = tempfile.mkstemp(prefix='alsv_tmp_', suffix='.laz', dir=dirname)
+    os.close(fd)
+
+    # If currently no EVLRs
+    if data.evlrs is None:
+        data.evlrs = laspy.vlrs.vlrlist.VLRList()
+
+    # Remove any current HAG record
+    hagRecList = data.evlrs.get_by_id(user_id=const.VLR_USERID_JRSRP,
+                                      record_ids=[const.VLR_RECORDID_HAG])
+    if len(hagRecList) > 0:
+        evlrList = [evlr for evlr in data.evlrs
+                    if not (evlr.user_id == const.VLR_USERID_JRSRP and
+                            evlr.record_id == const.VLR_RECORDID_HAG)]
+        data.evlrs = laspy.vlrs.vlrlist.VLRList(evlrList)
+
+    # Avoid overflow in conversion to centimetres
+    hagCmDtype = np.int16
+    # Max & min allowed values for the int datatype, converted back to metres
+    maxHag = np.iinfo(hagCmDtype).max / 100
+    minHag = np.iinfo(hagCmDtype).min / 100
+    hag_int16 = (hag.clip(minHag, maxHag) * 100).round().astype(hagCmDtype)
+    numPts = len(hag)
+    packFormat = f"<{numPts}h"
+    hagPacked = struct.pack(packFormat, *hag_int16)
+
+    hagEvlr = laspy.vlrs.vlr.VLR(user_id=const.VLR_USERID_JRSRP,
+                                 record_id=const.VLR_RECORDID_HAG,
+                                 description="Height Above Ground (cm)",
+                                 record_data=hagPacked)
+    data.evlrs.append(hagEvlr)
+    data.write(tmpfilename)
+    os.replace(tmpfilename, filename)
+
+
+def getHagArray(lasdata):
+    """
+    Get the Height Above Ground array from the given LasData object
+
+    Looks for our custom EVLR record. If no HAG record is found, return None.
+
+    Parameters:
+      lasdata (LazData): Data as read by laspy from the file
+
+    Returns:
+      hag (numpy array): Height Above Ground (metres) for every point. None if
+                         no HAG record found.
+    """
+    evlrList = lasdata.evlrs.get_by_id(user_id=const.VLR_USERID_JRSRP,
+                                       record_ids=[const.VLR_RECORDID_HAG])
+    if len(evlrList) == 0:
+        return None
+
+    if len(evlrList) > 1:
+        raise ValueError("Multiple HAG EVLRs found in LAS file")
+
+    evlr = evlrList[0]
+    numPts = len(lasdata)
+    packFormat = f"<{numPts}h"
+    hagList = struct.unpack(packFormat, evlr.record_data_bytes())
+    hag_int16 = np.array(hagList, dtype=np.int16)
+    hag = (hag_int16 / 100).astype(np.float32)
+    del hagList, hag_int16
+
+    # Check that the point record order is not scrambled
+    groundMask = (lasdata.classification == const.PTCLASS_GROUND)
+    allGroundZero = (hag[groundMask] == 0).all()
+    if not allGroundZero:
+        msg = "Some ground points with non-zero HAG. Probably point order is corrupted"
+        raise ValueError(msg)
+
+    return hag
