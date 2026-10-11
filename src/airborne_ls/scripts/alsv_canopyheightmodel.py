@@ -19,7 +19,8 @@ from airborne_ls import (
 
 # We will count return classes up to this class
 CLASSCOUNTS_MAXCLASS = const.PTCLASS_TEMPORALEXCLUSION
-PRODUCT_NAME = "chm"
+# Product name string for canopy height model
+CHM_PRODUCT_NAME = "chm"
 
 
 def getCmdargs():
@@ -75,9 +76,6 @@ def main():
             (group, numGroups) = tuple(cmdargs.groupMofN)
             filelist = filenaming_methods.filelistGroupSubset(filelist, group, numGroups)
 
-    nullVal = -999.0
-    pixSize = cmdargs.pixsize
-
     for filename in filelist:
         outputDir = qvf.setsuffix(filename, "")
         if not os.path.isdir(outputDir):
@@ -85,10 +83,10 @@ def main():
 
         tileBasename = os.path.basename(outputDir)
         outfile = os.path.join(outputDir, tileBasename)
-        stageCode = filenaming_methods.stageByProductName[PRODUCT_NAME]
+        stageCode = filenaming_methods.stageByProductName[CHM_PRODUCT_NAME]
         outfile = qvf.setstagecode(outfile, stageCode)
-        outfile = qvf.setoptionfield(outfile, 'l', PRODUCT_NAME)
-        resStr = filenaming_methods.resolutionStrFromMetres(pixSize)
+        outfile = qvf.setoptionfield(outfile, 'l', CHM_PRODUCT_NAME)
+        resStr = filenaming_methods.resolutionStrFromMetres(cmdargs.pixsize)
         outfile = qvf.setoptionfield(outfile, 'r', resStr)
         suffix = filenaming_methods.getSuffixFromDriverName(cmdargs.driver)
         outfile = qvf.setsuffix(outfile, suffix)
@@ -98,96 +96,111 @@ def main():
         else:
             print(filename)
 
-            # Get the projection, preserved in output raster
-            crs = laspy.open(filename).header.parse_crs()
-            if crs is None:
-                raise ValueError(f"File {filename} has no CRS (i.e. map projection)")
-            epsg = crs.to_epsg()
+            processOneTile(filename, cmdargs, outfile)
 
-            # Output raster array shape
-            tileSizePix = int(cmdargs.tilesize / pixSize)
-            tileShape = (tileSizePix, tileSizePix)
-            chmTile = np.zeros(tileShape, dtype=np.float32)
-            nonGroundClassesTile = np.full(tileShape, 254, dtype=np.uint8)
 
-            binnedData = lazfile_rw.readBinnedData(filename,
-                tileSize=cmdargs.tilesize, withNeighbours=True)
-            where = qvf.getwhere(filename)
-            (easting, northing, utmZone) = filenaming_methods.decomposeWhereField(where)
+def processOneTile(filename, cmdargs, outfile):
+    """
+    Process canopy height model for a single tile
 
-            # The number of pixel rows/cols in each bin
-            binSize = binnedData.ndx.binSize
-            nRowsPerBin = int(np.ceil(binSize / pixSize))
-            nColsPerBin = int(np.ceil(binSize / pixSize))
+    Parameters:
+      filename (str): Name of input LAZ file
+      cmdargs (argparse.Namespace): Command arguments object
+      outfile (str): Name of output raster file
+    """
+    nullVal = -999.0
+    pixSize = cmdargs.pixsize
 
-            for binRow in range(0, binnedData.numBinRows):
-                for binCol in range(0, binnedData.numBinCols):
-                    binTopLeftX = easting + binSize * binCol
-                    binTopLeftY = northing - binSize * binRow
+    # Get the projection, preserved in output raster
+    crs = laspy.open(filename).header.parse_crs()
+    if crs is None:
+        raise ValueError(f"File {filename} has no CRS (i.e. map projection)")
+    epsg = crs.to_epsg()
 
-                    # Pixel row/col of this bin (top-left pixel)
-                    binTopRow = binRow * nRowsPerBin
-                    binLeftCol = binCol * nColsPerBin
-                    # A slice which locates the bin within the tile
-                    binSlice = (slice(binTopRow, (binTopRow + nRowsPerBin)),
-                                slice(binLeftCol, (binLeftCol + nColsPerBin)))
+    # Output raster array shape
+    tileSizePix = int(cmdargs.tilesize / pixSize)
+    tileShape = (tileSizePix, tileSizePix)
+    chmTile = np.zeros(tileShape, dtype=np.float32)
+    nonGroundClassesTile = np.full(tileShape, 254, dtype=np.uint8)
 
-                    # Point data for this bin, with and without neighbouring margin
-                    binPts = binnedData.getData(binRow, binCol)
-                    binPtsWithMarg = gridding_methods.getBinPtsWithMargin(binnedData,
-                        binRow, binCol, cmdargs.binmargin, binTopLeftX, binTopLeftY)
+    binnedData = lazfile_rw.readBinnedData(filename,
+        tileSize=cmdargs.tilesize, withNeighbours=True)
+    where = qvf.getwhere(filename)
+    (easting, northing, utmZone) = filenaming_methods.decomposeWhereField(where)
 
-                    maxH_grid = np.full((nRowsPerBin, nColsPerBin), nullVal,
-                                       dtype=np.float32)
-                    (pixRow, pixCol) = gridding_methods.xyToRowCol(
-                        binPts["X"], binPts["Y"], binTopLeftX, binTopLeftY, pixSize)
+    # The number of pixel rows/cols in each bin
+    binSize = binnedData.ndx.binSize
+    nRowsPerBin = int(np.ceil(binSize / pixSize))
+    nColsPerBin = int(np.ceil(binSize / pixSize))
 
-                    gridding_methods.maxH_array(pixRow, pixCol, binPts["HAG"], maxH_grid)
+    for binRow in range(0, binnedData.numBinRows):
+        for binCol in range(0, binnedData.numBinCols):
+            binTopLeftX = easting + binSize * binCol
+            binTopLeftY = northing - binSize * binRow
 
-                    vegPtsMask = np.logical_and(
-                        binPtsWithMarg["CLASSIFICATION"] >= const.PTCLASS_LOWVEGETATION,
-                        binPtsWithMarg["CLASSIFICATION"] <= const.PTCLASS_HIGHVEGETATION,
-                    )
+            # Pixel row/col of this bin (top-left pixel)
+            binTopRow = binRow * nRowsPerBin
+            binLeftCol = binCol * nColsPerBin
+            # A slice which locates the bin within the tile
+            binSlice = (slice(binTopRow, (binTopRow + nRowsPerBin)),
+                        slice(binLeftCol, (binLeftCol + nColsPerBin)))
 
-                    chmVeg = gridding_methods.chm_alg(
-                        binPtsWithMarg[vegPtsMask], binPtsWithMarg[vegPtsMask]['HAG'],
-                        maxH_grid, pixSize, binTopLeftX, binTopLeftY,
-                        binSize, nRowsPerBin, nColsPerBin, nullVal)
-                    chmTile[binSlice] = chmVeg
+            # Point data for this bin, with and without neighbouring margin
+            binPts = binnedData.getData(binRow, binCol)
+            binPtsWithMarg = gridding_methods.getBinPtsWithMargin(binnedData,
+                binRow, binCol, cmdargs.binmargin, binTopLeftX, binTopLeftY)
 
-                    # Count return classes per-pixel
-                    classCountsShape = (CLASSCOUNTS_MAXCLASS + 1, nRowsPerBin, nColsPerBin)
-                    classCounts = np.zeros(classCountsShape, dtype=np.uint16)
-                    gridding_methods.makeClassCounts(pixRow, pixCol, binPts["X"],
-                        binPts["Y"], binPts["Z"], binPts["CLASSIFICATION"],
-                        classCounts)
-                    nonGroundClasses = np.full((nRowsPerBin, nColsPerBin), 254, dtype=np.uint8)
-                    # nonGroundClasses is most common non-ground class in each pixel
-                    classCountsNonGround = np.copy(classCounts)
-                    classCountsNonGround[const.PTCLASS_GROUND] = 0
-                    nonGroundClasses = classCountsNonGround.argmax(axis=0)
-                    del classCountsNonGround
-                    nonGroundClassesTile[binSlice] = nonGroundClasses
+            maxH_grid = np.full((nRowsPerBin, nColsPerBin), nullVal,
+                               dtype=np.float32)
+            (pixRow, pixCol) = gridding_methods.xyToRowCol(
+                binPts["X"], binPts["Y"], binTopLeftX, binTopLeftY, pixSize)
 
-            # Interpolating over buildings can be a problem - mask out affected pixels here
-            veg_msk = np.logical_or(nonGroundClassesTile == const.PTCLASS_BUILDING,
-                                    nonGroundClassesTile == const.PTCLASS_WATER)
-            struct2 = ndimage.generate_binary_structure(2, 2)
-            veg_msk = ndimage.binary_dilation(veg_msk, structure=struct2)
-            veg_msk = ndimage.binary_dilation(veg_msk, structure=struct2)
-            chmTile[veg_msk] = 0
+            gridding_methods.maxH_array(pixRow, pixCol, binPts["HAG"], maxH_grid)
 
-            # Smooth out with a median filter, ignoring zeros
-            masked_array = np.ma.masked_equal(chmTile, 0)
-            chmTile = ndimage.median_filter(masked_array, size=3)
+            vegPtsMask = np.logical_and(
+                binPtsWithMarg["CLASSIFICATION"] >= const.PTCLASS_LOWVEGETATION,
+                binPtsWithMarg["CLASSIFICATION"] <= const.PTCLASS_HIGHVEGETATION,
+            )
 
-            # Anything which is not canopy is set to null
-            chmTile[chmTile < 0.5] = nullVal
+            chmVeg = gridding_methods.chm_alg(
+                binPtsWithMarg[vegPtsMask], binPtsWithMarg[vegPtsMask]['HAG'],
+                maxH_grid, pixSize, binTopLeftX, binTopLeftY,
+                binSize, nRowsPerBin, nColsPerBin, nullVal)
+            chmTile[binSlice] = chmVeg
 
-            # Now write the image to file
-            rw_image_methods.writeImage(np.round(chmTile, 3), outfile,
-                tlx=easting, tly=northing, binsize=pixSize, epsg=epsg,
-                nullVal=nullVal, parent_file=filename, driverName=cmdargs.driver)
+            # Count return classes per-pixel
+            classCountsShape = (CLASSCOUNTS_MAXCLASS + 1, nRowsPerBin, nColsPerBin)
+            classCounts = np.zeros(classCountsShape, dtype=np.uint16)
+            gridding_methods.makeClassCounts(pixRow, pixCol, binPts["X"],
+                binPts["Y"], binPts["Z"], binPts["CLASSIFICATION"],
+                classCounts)
+            nonGroundClasses = np.full((nRowsPerBin, nColsPerBin), 254, dtype=np.uint8)
+            # nonGroundClasses is most common non-ground class in each pixel
+            classCountsNonGround = np.copy(classCounts)
+            classCountsNonGround[const.PTCLASS_GROUND] = 0
+            nonGroundClasses = classCountsNonGround.argmax(axis=0)
+            del classCountsNonGround
+            nonGroundClassesTile[binSlice] = nonGroundClasses
+
+    # Interpolating over buildings can be a problem - mask out affected pixels here
+    veg_msk = np.logical_or(nonGroundClassesTile == const.PTCLASS_BUILDING,
+                            nonGroundClassesTile == const.PTCLASS_WATER)
+    struct2 = ndimage.generate_binary_structure(2, 2)
+    veg_msk = ndimage.binary_dilation(veg_msk, structure=struct2)
+    veg_msk = ndimage.binary_dilation(veg_msk, structure=struct2)
+    chmTile[veg_msk] = 0
+
+    # Smooth out with a median filter, ignoring zeros
+    masked_array = np.ma.masked_equal(chmTile, 0)
+    chmTile = ndimage.median_filter(masked_array, size=3)
+
+    # Anything which is not canopy is set to null
+    chmTile[chmTile < 0.5] = nullVal
+
+    # Now write the image to file
+    rw_image_methods.writeImage(np.round(chmTile, 3), outfile,
+        tlx=easting, tly=northing, binsize=pixSize, epsg=epsg,
+        nullVal=nullVal, parent_file=filename, driverName=cmdargs.driver)
 
 
 if __name__ == "__main__":
