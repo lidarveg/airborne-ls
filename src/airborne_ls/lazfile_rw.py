@@ -95,6 +95,13 @@ class BinnedData:
         Open the file, and read data into binned structure. Limit to nominated row or
         col if required. If both row and col are given, then only the intersecting bin
         is loaded.
+
+        Parameters:
+          filename (str): Name of LAS/LAZ file to read
+          row, col (int): If not None, limit to the specified row or column of bins. If both
+                          are given, only the intersecting bin is loaded.
+          includeHAG (bool): If True, also load the Height Above Ground data (if present),
+                             and include this in the recarrays for each bin
         """
         f = laspy.open(filename)
         self.ndx = LazNdx(f)
@@ -147,6 +154,8 @@ class BinnedData:
 
         Parameters:
           data (LasData): Points read directly from file
+          includeHAG (bool): If True, also load the Height Above Ground data (if present),
+                             and include this in the returned recarray
 
         Returns:
           (numpy recarray): Custom record array of point data
@@ -280,6 +289,8 @@ def readBinnedData(filename, tileSize=None, withNeighbours=False, includeHAG=Tru
       withNeighbours (bool): If True, also read data from neighbouring bins in
                              all 8 neighbouring tiles (wherever available). Assumes
                              our standard internal file naming.
+      includeHAG (bool): If True, also load the Height Above Ground data (if present),
+                         and include this in the recarrays for each bin
 
     Returns:
       (BinnedData): The data for the tile, binned by the index
