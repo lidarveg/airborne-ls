@@ -27,7 +27,16 @@ def getCmdargs():
     """
     Get command line arguments
     """
-    p = argparse.ArgumentParser()
+    p = argparse.ArgumentParser(description="""
+        Calculate pit-free canopy height model, based on Khosravipour, A, et. al. (2014),
+        Generating Pit-free Canopy Height Models from Airborne Lidar.
+        Photogrammetric Engineering & Remote Sensing 80(9), pp 863-872.
+        doi: 10.14358/PERS.80.9.863
+
+        One or more input LAZ files are processed to corresponding raster output images. The
+        LAZ files must be as output by alsv_lidar_standardisation, with the Height Above Ground
+        added using the alsv_addhag command.
+    """)
     p.add_argument("--indir", help="Directory of LAZ files to process")
     p.add_argument("--infile", help="Individual LAZ file to process")
     p.add_argument("--groupMofN", nargs=2, metavar=('M', 'N'), type=int,
@@ -39,7 +48,7 @@ def getCmdargs():
               "would be specified as '--groupMofN 1 5'"))
     p.add_argument("--tilesize", default=1000, type=int,
         help=("Tile size (metres). We need this so we can find neighbouring tiles " +
-              "(default=%(default)s"))
+              "(default=%(default)s)"))
     p.add_argument("--pixsize", default=0.2, type=float,
         help="Pixel size of the CHM output raster (metres) (default=%(default)s)")
     p.add_argument("--binmargin", type=int, default=33,
@@ -49,8 +58,8 @@ def getCmdargs():
     p.add_argument("--driver", default='GTiff',
         help="GDAL driver for output image format (default=%(default)s)")
     p.add_argument("--skipexisting", default=False, action="store_true",
-        help=("Skip input file if ALL its outputs already exist. Default will re-create " +
-              "all output files, regardless of existence"))
+        help=("Skip input file if the output file already exists. Default will re-create " +
+              "the output file, regardless of existence"))
 
     cmdargs = p.parse_args()
 
