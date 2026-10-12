@@ -637,15 +637,15 @@ def check_divisible(psizes):
 
     for loc, psize in enumerate(psizes):
         if psize <= 1.0:
-            if (1.0 % psize) != 0:
+            if round(1.0 / psize) * psize != 1.0:
                 msg = f"error: cmdargs.{pName[loc]} {psize} not divisible"
                 sys.exit(msg)
         elif psize <= 10.0:
-            if (10.0 % psize) != 0:
+            if round(10.0 / psize) * psize != 10.0:
                 msg = f"error: cmdargs.{pName[loc]} {psize} not divisible"
                 sys.exit(msg)
         else:
-            if (100.0 % psize) != 0:
+            if round(100.0 / psize) * psize != 100.0:
                 msg = f"error: cmdargs.{pName[loc]} {psize} not divisible"
                 sys.exit(msg)
 
