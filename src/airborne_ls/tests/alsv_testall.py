@@ -14,7 +14,7 @@ import numpy as np
 from osgeo import gdal
 import laspy
 from airborne_ls.tests import gentestdata
-from airborne_ls import qvf
+from airborne_ls import qvf, lazfile_rw
 
 
 gdal.UseExceptions()
@@ -43,7 +43,9 @@ def main():
     testCounts = TestCounts()
     createTestData(lazfile, testCounts)
     checkStandardisation(lazfile, indexedDir, testCounts)
+    checkAddHag(indexedDir, testCounts)
     checkTileProd(indexedDir, testCounts)
+    checkCHM(indexedDir, testCounts)
     checkGapFill(indexedDir, testCounts)
     checkFlowAcc(indexedDir, testCounts)
 
@@ -124,6 +126,29 @@ def checkStandardisation(lazfile, indexedDir, testCounts):
         testCounts.failed()
 
 
+def checkAddHag(indexedDir, testCounts):
+    """
+    Test the alsv_addhag command
+    """
+    testName = "AddHAG"
+
+    cmd = ['alsv_addhag', '--indir', indexedDir]
+    ok = runCmd(cmd, testName)
+
+    if ok:
+        stdLazfile = None
+        outfileList = glob.glob(f"{indexedDir}/*.laz")
+        stdLazfile = outfileList[0]
+        lazdata = laspy.read(stdLazfile)
+        hag = lazfile_rw.getHagArray(lazdata)
+        nonzeroHAG = hag[hag > 0]
+        checkEqual(testName, nonzeroHAG.min(), 9.140000343322754, testCounts, "HAG min value")
+        checkEqual(testName, nonzeroHAG.max(), 22.309999465942383, testCounts, "HAG max value")
+        checkEqual(testName, nonzeroHAG.mean(), 15.218514442443848, testCounts, "HAG mean value")
+    else:
+        testCounts.failed()
+
+
 def checkTileProd(indexedDir, testCounts):
     """
     Check the raster tile products
@@ -176,6 +201,29 @@ def checkFPC(indexedDir, testCounts):
         checkEqual(testName, numZero, 9952, testCounts, "Number of nonzero FPC pixels")
         checkEqual(testName, forestMeanFPC, 43.333333333333336, testCounts,
             "Forest FPC mean")
+
+
+def checkCHM(indexedDir, testCounts):
+    """
+    Check canopy height model
+    """
+    testName = "checkCHM"
+
+    cmd = ['alsv_canopyheightmodel', '--indir', indexedDir, '--tilesize', '1000']
+    ok = runCmd(cmd, testName)
+
+    if ok:
+        chmFileList = glob.glob(f"{indexedDir}/*/*_bbnm6_lchm_*.tif")
+        if len(chmFileList) == 0:
+            reportError(testName, "CHM file not found")
+            testCounts.failed()
+        else:
+            chm = readImg(chmFileList[0])
+            nonzeroCHM = chm[chm > 0]
+            meanCHM = nonzeroCHM.mean()
+            checkEqual(testName, meanCHM, 0, testCounts, "CHM mean")
+    else:
+        testCounts.failed()
 
 
 def checkGapFill(indexedDir, testCounts):
@@ -261,7 +309,9 @@ def runCmd(cmd, testName):
         stderr = stderr.replace(badStr, '').strip()
 
         if exitStat != 0 or len(stderr) > 0:
-            msg = f"Exit status {exitStat} from {cmd[0]}.\n{stderr}"
+            cmdStr = ' '.join(cmd)
+            msg = (f"Exit status {exitStat} from {cmd[0]}.\n" +
+                  f"{cmdStr}\nstdout:{stdout}\nstderr:{stderr}")
             reportError(testName, msg)
             ok = False
     except FileNotFoundError:
