@@ -154,12 +154,12 @@ def getCmdargs(inputargs):
     if cmdargs.outtilesize is None:
         cmdargs.outtilesize = cmdargs.intilesize
 
-    if (cmdargs.intilesize % cmdargs.outtilesize) != 0:
+    if round(cmdargs.intilesize / cmdargs.outtilesize) * cmdargs.outtilesize != cmdargs.intilesize:
         msg = (f"Input tile size {cmdargs.intilesize} not divisible by " +
                f"output tile size {cmdargs.outtilesize}")
         raise ValueError(msg)
 
-    if (cmdargs.outtilesize % cmdargs.binsize) != 0:
+    if round(cmdargs.outtilesize / cmdargs.binsize) * cmdargs.binsize != cmdargs.outtilesize:
         msg = f"Output tile size {cmdargs.outtilesize} not divisible by bin size {cmdargs.binsize}"
         raise ValueError(msg)
 
