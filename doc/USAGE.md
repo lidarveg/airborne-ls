@@ -39,14 +39,28 @@ and the project name.
 
 All subsequent processing works with these standardised LAZ files.
 
+## Add Height Above Ground
+For every point return which is not classified as "Ground", calculate its height above
+the interpolated ground surface, and store this in the LAZ file. This is then available to
+subsequent steps which calculate vegetation metrics. This is known as Height Above Ground (HAG).
+
+```bash
+alsv_addhag --indir alsProjectDir-std --tilesize 1000
+```
+
+The LAZ files are updated in place.
+
 ## Producing per-tile raster products
 The next step is to produce a range of raster images from these standardised LAZ files.
 
 These products include a raster of ground elevations (i.e. a Digital Elevation Model, or DEM),
-and a number of vegetation characteristics in raster form, such as a Canopy Height Model (CHM),
-Foliage Projective Cover (FPC), and several others. These are produced for each LAZ tile,
-in a subdirectory under the directory containing the standardised LAZ files, each subdirectory
-being named to match its corresponding LAZ file (without the `.laz` suffix). 
+and a number of vegetation characteristics in raster form, such as maximum height above ground
+per pixel, interpolated maximum height (canopy surface), Foliage Projective Cover (FPC), and
+several others.
+
+These are produced for each LAZ tile, in a subdirectory under the directory containing the
+standardised LAZ files, each subdirectory being named to match its corresponding LAZ file
+(without the `.laz` suffix). 
 
 The various interpolations from irregular point data are done using Natural Neighbour interpolation,
 at the level of individual index bins, and will use data from surrounding bins (including from
@@ -55,6 +69,22 @@ neighbouring tiles) as required.
 ```bash
 alsv_tile_products --indir alsProjectDir-std --tilesize 1000 --pixsize 0.5
 ```
+
+## Canopy Height Model
+Some of the products created above represent the height of the vegetation canopy, but have holes
+and defects. The most sophisticated algorithm we have implemented for this is the pit-free
+canopy height model of Khosravipour et. al (2014). This is fairly slow, taking somewhat more time
+than all the other tile products produced above, and not all users need it, so this is implemented
+in a separate command
+
+```bash
+alsv_canopyheightmodel --indir alsProjectDir-std --tilesize 1000
+```
+This writes output raster tiles of just this Canopy Height Model (CHM) product.
+
+A Khosravipour, AK Skidmore, M Isenburg, T Wang & YA Hussin (2014). Generating Pit-free Canopy Height
+Models from Airborne Lidar. Photogrammetric Engineering & Remote Sensing 80(9), pp 863-872.
+doi: 10.14358/PERS.80.9.863
 
 ## Fill any DEM gaps
 For a range of reasons, the resulting DEM can sometimes contain holes which could not be
@@ -80,7 +110,7 @@ This will produce a number of output rasters, writing into the `indir` directory
 the output files are GeoTiff files with CloudOptimizedTiff (COG) layout (different raster
 formats can be used).
 
-Currently there are 17 output products. The file names include a stage code indicating which
+Currently there are 18 output products. The file names include a stage code indicating which
 product it is. The various fields are separated by underscores. For example, the DEM
 is named something like
 ```
@@ -90,7 +120,8 @@ The stage code for the DEM is `bb0`. The 5th field, tagged with `r`, is for the 
 (i.e. pixel size), in this case 50cm. The project name is `brisba` and the year of acquisition
 is 2014.
 
-See [stageCodes.md](stageCodes.md) for all the products and stage codes.
+See [stageCodes.md](stageCodes.md) for all the products and stage codes, and a reference to the
+file naming conventions.
 
 ## Hydrological flow accumulation
 A simple wrapper script is provided which uses the RichDEM package to compute hydrological flow

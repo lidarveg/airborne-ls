@@ -1,10 +1,15 @@
 # airborne-ls
 
-Currently under development
+**Caution**: This package is currently under development, and is considered "beta test". At this stage,
+some commands may still change, and functionality may be moved around. Only once things settle down
+will we make stronger efforts to ensure backward compatibility of changes.
 
-Airborne-ls is a package for processing a single contiguous capture of airborne Lidar flightlines, producing a number of output products, including ground surface elevation (DEM), vegetation canopy height, foliage projective cover (FPC), etc.
+Airborne-ls is a package for processing a single contiguous capture of airborne Lidar flightlines,
+producing a number of output products, including ground surface elevation (DEM), vegetation canopy
+height, foliage projective cover (FPC), etc.
 
-The initial input is a collection of LAS/LAZ format tiles of Lidar point data, and the outputs are raster images at suitable resolutions.
+The initial input is a collection of LAS/LAZ format tiles of Lidar point data, and the outputs are
+raster images at suitable resolutions.
 
 ## Installation
 

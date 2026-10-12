@@ -11,14 +11,18 @@ pixel sizes vary between products, as some are more suited to finer scales than 
 |    bb3     | Whether pixel has any ground returns         |
 |    bb4     | Most common non-ground point classification  |
 |    bb5     | Density of first returns                     |
-|    bb8     | percentile1                                  |
-|    bb9     | percentile5                                  |
-|    bba     | percentile25                                 |
-|    bbb     | percentile50                                 |
-|    bbc     | percentile75                                 |
-|    bbd     | percentile95                                 |
-|    bbe     | percentile99                                 |
+|    bb8     | Vegetation height percentile  1              |
+|    bb9     | Vegetation height percentile  5              |
+|    bba     | Vegetation height percentile 25              |
+|    bbb     | Vegetation height percentile 50              |
+|    bbc     | Vegetation height percentile 75              |
+|    bbd     | Vegetation height percentile 95              |
+|    bbe     | Vegetation height percentile 99              |
 |    bbh     | Foliage Projective Cover                     |
 |    bbi     | DEM hillshade                                |
 |    bbm     | Canopy Surface Model                         |
 |    bbn     | Canopy Height Model                          |
+|    bbq     | Flow accumulation                            |
+
+A far more detailed explanation of the file naming conventions is provided
+at [QVF Lidar filenames](https://jrsrp.gitlab.io/sys/meta_info/lidar_filename_codes/)
