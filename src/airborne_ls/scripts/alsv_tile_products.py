@@ -14,7 +14,7 @@
 # - New sub-tile indexing has been applied to optimise memory usage.
 #
 # Note: The resolution and point density of the datasets will significantly influence
-#       processing times. The computation of the CHM is slow, will seek to optimise.
+#       processing times.
 #
 ####################################################################################################
 
@@ -22,7 +22,7 @@ example:
 
 alsv_tile_products \
     --indir lidarveg_testing_data/Brisbane_2014_LGA_sub/indexed_tiles/ --epsg 28356 \
-    --tilesize 1000 --pixsize 0.5 --chm_pixsize 0.2
+    --tilesize 1000 --pixsize 0.5
 
 """
 
@@ -35,7 +35,6 @@ from pathlib import Path
 
 import laspy
 import numpy as np
-from scipy import ndimage
 from osgeo import gdal
 
 from airborne_ls import (
@@ -103,8 +102,6 @@ def getCmdargs(inputargs):
         help="Pixel size of percentile output layers (metres) (default=%(default)s)")
     pixsizeGrp.add_argument("--fpc_pixsize", default=10.0, type=float,
         help="Pixel size of the FPC layer (metres) (default=%(default)s)")
-    pixsizeGrp.add_argument("--chm_pixsize", default=0.2, type=float,
-        help="Pixel size of the CHM layer (metres) (default=%(default)s)")
 
     # File processing options
     parser.add_argument("--split_fpc", default=False, action=argparse.BooleanOptionalAction,
@@ -162,9 +159,6 @@ def run_tile_products(cmdargs):
             infilelist = filenaming_methods.filelistGroupSubset(infilelist, group, numGroups)
 
     nullVal = -999.0
-    neigh8 = np.array(
-        [[-1, 1], [0, 1], [1, 1], [-1, 0], [1, 0], [-1, -1], [0, -1], [1, -1]]
-    )
 
     timings = timinghooks.Timers()
 
@@ -191,7 +185,6 @@ def run_tile_products(cmdargs):
             pixsize=cmdargs.pixsize,
             pcntile_pixsize=cmdargs.pcntile_pixsize,
             fpc_pixsize=cmdargs.fpc_pixsize,
-            chm_pixsize=cmdargs.chm_pixsize,
             pptiles=percentiles,
         )
         allExist = checkOutfilesExist(outfnames)
@@ -201,8 +194,6 @@ def run_tile_products(cmdargs):
             # arrays to store processing segments of tiles
             tileSizePix = int(cmdargs.tilesize / cmdargs.pixsize)
             tileShape = (tileSizePix, tileSizePix)
-            tileSizeChmPix = int(cmdargs.tilesize / cmdargs.chm_pixsize)
-            tileChmShape = (tileSizeChmPix, tileSizeChmPix)
             tileSizeFpcPix = int(cmdargs.tilesize / cmdargs.fpc_pixsize)
             tileFpcShape = (tileSizeFpcPix, tileSizeFpcPix)
             tileSizePctPix = int(cmdargs.tilesize / cmdargs.pcntile_pixsize)
@@ -210,7 +201,6 @@ def run_tile_products(cmdargs):
 
             demTile = np.full(tileShape, nullVal, dtype=np.float32)
             csmTile = np.full(tileShape, nullVal, dtype=np.float32)
-            chmTile = np.zeros(tileChmShape, dtype=np.float32)
             maxhTile = np.full(tileShape, nullVal, dtype=np.float32)
             intensTile = np.full(tileShape, nullVal, dtype=np.float32)
             ptDenTile = np.zeros(tileShape, dtype=np.uint16)
@@ -226,7 +216,7 @@ def run_tile_products(cmdargs):
             epsg = crs.to_epsg()
 
             # read in point data for the tile
-            # allDataByBin stores the point data in chunks/bins for rapid access
+            # binnedData stores the point data in chunks/bins for rapid access
             with timings.interval('readbindata'):
                 binnedData = lazfile_rw.readBinnedData(infileFull,
                     tileSize=cmdargs.tilesize, withNeighbours=True)
@@ -242,16 +232,16 @@ def run_tile_products(cmdargs):
             for binRow in range(0, binnedData.numBinRows):
                 for binCol in range(0, binnedData.numBinCols):
                     with timings.interval('total_processing'):
-                        processOneBin(binRow, binCol, cmdargs, binSize, binnedData, neigh8,
+                        processOneBin(binRow, binCol, cmdargs, binSize, binnedData,
                             easting, northing, nRowsPerBin, nColsPerBin, nullVal,
-                            demTile, csmTile, chmTile, maxhTile, intensTile, ptDenTile, grTile,
+                            demTile, csmTile, maxhTile, intensTile, ptDenTile, grTile,
                             non_grTile, pctTile, fpcTile, timings)
 
             del binnedData
 
             with timings.interval('write_rasters'):
                 writeOutputRasters(cmdargs, epsg, outfnames, easting, northing, nullVal,
-                    infileFull, demTile, csmTile, chmTile, maxhTile, intensTile, ptDenTile,
+                    infileFull, demTile, csmTile, maxhTile, intensTile, ptDenTile,
                     grTile, non_grTile, pctTile, fpcTile)
 
             # calculate and write out to a temporary file return,pulse,area stats while
@@ -277,8 +267,8 @@ def run_tile_products(cmdargs):
         reportTimings(timings)
 
 
-def processOneBin(binRow, binCol, cmdargs, binSize, binnedData, neigh8, easting, northing,
-        nRowsPerBin, nColsPerBin, nullVal, demTile, csmTile, chmTile, maxhTile,
+def processOneBin(binRow, binCol, cmdargs, binSize, binnedData, easting, northing,
+        nRowsPerBin, nColsPerBin, nullVal, demTile, csmTile, maxhTile,
         intensTile, ptDenTile, grTile, non_grTile, pctTile, fpcTile, timings):
     """
     Do all calculation for a single index bin. Fills in the pixels for the bin
@@ -294,14 +284,12 @@ def processOneBin(binRow, binCol, cmdargs, binSize, binnedData, neigh8, easting,
       cmdargs (argparse.Namespace): The command arguments object
       binSize (float): Size of bin edge (metres)
       binnedData (BinnedData): All data, accessible by bin
-      neigh8 (array): 1/0/-1 values for offset to 8 neighbouring bins
       easting, northing (float): Coordinates (metres) of top-left corner of the
                                  whole tile
       nRowsPerBin, nColsPerBin (int): Number of rows & cols of standard pixels in each bin
       nullVal (float): Null value for most of the arrays
       demTile : Output array for ground DEM
       csmTile : Output array for Canopy Surface Model
-      chmTile : Output array for Canopy Height Model
       maxhTile : Output array for max height
       intensTile : Output array for intensity
       ptDenTile : Output array for per-pixel point density
@@ -314,17 +302,9 @@ def processOneBin(binRow, binCol, cmdargs, binSize, binnedData, neigh8, easting,
     binTopLeftX = easting + binSize * binCol
     binTopLeftY = northing - binSize * binRow
     binChunk = binnedData.getData(binRow, binCol)
-    chunk = binnedData.getData(binRow, binCol)
+    chunk = gridding_methods.getBinPtsWithMargin(binnedData, binRow, binCol,
+        cmdargs.binmargin, binTopLeftX, binTopLeftY)
     if len(chunk) > 10:
-        for n8 in neigh8:
-            (nbrBinRow, nbrBinCol) = (int(binRow + n8[0]), int(binCol + n8[1]))
-            nbrBinData = binnedData.getData(nbrBinRow, nbrBinCol)
-            if nbrBinData is not None:
-                with timings.interval('trimnbrbins'):
-                    nbrBinData = trimNeighbourBin(nbrBinData, n8[0], n8[1],
-                        cmdargs.binmargin, binTopLeftX, binTopLeftY, binSize)
-                chunk = np.concatenate((chunk, nbrBinData))
-
         # run dem
         grdhits = (chunk["CLASSIFICATION"] == const.PTCLASS_GROUND)
         if np.sum(grdhits) > 10:
@@ -376,14 +356,8 @@ def processOneBin(binRow, binCol, cmdargs, binSize, binnedData, neigh8, easting,
             csmTile[csmTile < -5] = nullVal
             #######################################################################
             # interp to irregular grid
-            nonGround = (binChunk["CLASSIFICATION"] != const.PTCLASS_GROUND)
 
-            with timings.interval('heightaboveground_binonly'):
-                heightAboveGround = (
-                    gridding_methods.createHeightAboveGround(nonGround,
-                        binChunk["X"], binChunk["Y"], binChunk["Z"],
-                        chunk["X"][grdhits], chunk["Y"][grdhits], chunk["Z"][grdhits])
-                )
+            heightAboveGround = binChunk["HAG"]
 
             pntIntensity = binChunk["INTENSITY"]
             # pntClass = binChunk["CLASSIFICATION"]
@@ -413,51 +387,6 @@ def processOneBin(binRow, binCol, cmdargs, binSize, binnedData, neigh8, easting,
             intensTile[binSlice] = intensityAtMaxH
             grTile[binSlice] = haveGroundReturn
             non_grTile[binSlice] = nonGroundClasses
-
-            #######################################################################
-            # CREATE Canopy Height Model
-            # refer Khosravipour_2014 pit-free
-            # could include classification const.PTCLASS_LOWVEGETATION as well
-            number_veg_rets = np.count_nonzero(np.logical_or(
-                binChunk["CLASSIFICATION"] == const.PTCLASS_MEDIUMVEGETATION,
-                binChunk["CLASSIFICATION"] == const.PTCLASS_HIGHVEGETATION
-            ))
-            if number_veg_rets > 10:
-                with timings.interval('csm_xytorowcol'):
-                    (row_chm, col_chm) = gridding_methods.xyToRowCol(
-                        binChunk["X"], binChunk["Y"], binEasting, binNorthing,
-                        cmdargs.chm_pixsize)
-                nRows_chm = int(np.ceil(binSize / cmdargs.chm_pixsize))
-                nCols_chm = int(np.ceil(binSize / cmdargs.chm_pixsize))
-                binLeftCol_chm = binCol * nCols_chm
-                binTopRow_chm = binRow * nRows_chm
-
-                maxH_hag = np.full((nRows_chm, nCols_chm), nullVal,
-                                   dtype=np.float32)
-                with timings.interval('maxh_array'):
-                    gridding_methods.maxH_array(row_chm, col_chm,
-                        heightAboveGround, maxH_hag)
-                maxH_vals = (
-                    chunk["CLASSIFICATION"] <= const.PTCLASS_HIGHVEGETATION
-                )  # this includes unclassified returns.. not sure of zero?
-                with timings.interval('heightaboveground_binwithnbrs'):
-                    chunk_hag = gridding_methods.createHeightAboveGround(
-                        maxH_vals, chunk["X"], chunk["Y"], chunk["Z"],
-                        chunk["X"][grdhits], chunk["Y"][grdhits], chunk["Z"][grdhits])
-                vals = np.logical_and(
-                    chunk["CLASSIFICATION"] >= const.PTCLASS_LOWVEGETATION,
-                    chunk["CLASSIFICATION"] <= const.PTCLASS_HIGHVEGETATION,
-                )
-                if np.sum(vals) > 5:
-                    with timings.interval('chm_alg'):
-                        chmVeg = gridding_methods.chm_alg(
-                            chunk[vals], chunk_hag[vals], maxH_hag,
-                            cmdargs.chm_pixsize, binEasting, binNorthing,
-                            binSize, nRows_chm, nCols_chm, nullVal)
-                    chmTile[
-                        binTopRow_chm : (binTopRow_chm + nRows_chm),
-                        binLeftCol_chm : (binLeftCol_chm + nCols_chm),
-                    ] = chmVeg
 
             ##############################
             # run pulse density density
@@ -501,22 +430,21 @@ def processOneBin(binRow, binCol, cmdargs, binSize, binnedData, neigh8, easting,
             with timings.interval('flightlines'):
                 flightlines = fpc_method.check_pts_pulses(binChunk)
             canopyThreshold = 1.7
-            hag = heightAboveGround
 
             with timings.interval('fpc'):
                 fpc = fpc_method.doFPC(binEasting, binNorthing, binChunk,
-                    flightlines, hag, cmdargs.fpc_pixsize,
+                    flightlines, heightAboveGround, cmdargs.fpc_pixsize,
                     binSize, cmdargs.split_fpc, canopyThreshold)
             fpcTile[
                 binTopRow_fpc : (binTopRow_fpc + nRows_fpc),
                 binLeftCol_fpc : (binLeftCol_fpc + nCols_fpc),
             ] = fpc
             ############################
-            del chunk, binChunk, flightlines, hag
+            del chunk, binChunk, flightlines
 
 
 def writeOutputRasters(cmdargs, epsg, outfnames, easting, northing, nullVal, infileFull,
-        demTile, csmTile, chmTile, maxhTile, intensTile, ptDenTile, grTile,
+        demTile, csmTile, maxhTile, intensTile, ptDenTile, grTile,
         non_grTile, pctTile, fpcTile):
     """
     Write the tile arrays into their respoective output raster files.
@@ -529,7 +457,6 @@ def writeOutputRasters(cmdargs, epsg, outfnames, easting, northing, nullVal, inf
       nullVal (float): Null value for most rasters
       demTile : Output array for ground DEM
       csmTile : Output array for Canopy Surface Model
-      chmTile : Output array for Canopy Height Model
       maxhTile : Output array for max height
       intensTile : Output array for intensity
       ptDenTile : Output array for per-pixel point density
@@ -544,23 +471,6 @@ def writeOutputRasters(cmdargs, epsg, outfnames, easting, northing, nullVal, inf
         nullVal=nullVal, parent_file=infileFull, driverName=cmdargs.driver)
     rw_image_methods.writeImage(np.round(csmTile, 3), outfnames["csm"],
         tlx=easting, tly=northing, binsize=cmdargs.pixsize, epsg=epsg,
-        nullVal=nullVal, parent_file=infileFull, driverName=cmdargs.driver)
-
-    # interpolating over buildings can be a problem - msk out affected pixels here
-    multi = cmdargs.pixsize / cmdargs.chm_pixsize
-    veg_msk = np.logical_or(non_grTile == const.PTCLASS_BUILDING,
-                            non_grTile == const.PTCLASS_WATER)
-    veg_msk = ndimage.zoom(veg_msk, multi, order=0)
-    struct2 = ndimage.generate_binary_structure(2, 2)
-    veg_msk = ndimage.binary_dilation(veg_msk, structure=struct2)
-    veg_msk = ndimage.binary_dilation(veg_msk, structure=struct2)
-    chmTile[veg_msk] = 0
-
-    masked_array = np.ma.masked_equal(chmTile, 0)
-    chmTile = ndimage.median_filter(masked_array, size=3)  # median filter ignoring zeros
-    chmTile[chmTile < 0.5] = nullVal
-    rw_image_methods.writeImage(np.round(chmTile, 3), outfnames["chm"],
-        tlx=easting, tly=northing, binsize=cmdargs.chm_pixsize, epsg=epsg,
         nullVal=nullVal, parent_file=infileFull, driverName=cmdargs.driver)
 
     rw_image_methods.writeImage(np.round(maxhTile, 3), outfnames["maxH"],
