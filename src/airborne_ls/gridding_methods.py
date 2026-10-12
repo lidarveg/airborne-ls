@@ -548,7 +548,7 @@ def dem_infill(dem, codes, nullVal=-999.0, minElev=-4):
 
 
 ###################################################################################################
-# CSM
+# CHM
 def chm_alg(chunk, chunk_hag, maxH_hag, psize, xst_bin, yst_bin, binSize, nRows, nCols,
         nullVal, minH_thres=1.0):
     """
@@ -568,9 +568,6 @@ def chm_alg(chunk, chunk_hag, maxH_hag, psize, xst_bin, yst_bin, binSize, nRows,
     Returns:
         outarr: 2D array representing the generated CHM.
     """
-    # Assign height above ground values to the 'Z' field in the chunk
-    chunk["Z"] = chunk_hag
-
     # Initialise the output array
     outarr = np.zeros((nRows, nCols), dtype=np.float32)
 
@@ -581,7 +578,7 @@ def chm_alg(chunk, chunk_hag, maxH_hag, psize, xst_bin, yst_bin, binSize, nRows,
         dil_struct = np.ones((4, 4))
 
     # Determine height increments for processing
-    max_height = np.max(chunk["Z"])
+    max_height = np.max(chunk_hag)
     if max_height > 5.0:
         h_incs = np.arange(0, int(np.ceil(max_height / 5) * 5), 5)
     elif max_height > 1.0:
@@ -595,12 +592,13 @@ def chm_alg(chunk, chunk_hag, maxH_hag, psize, xst_bin, yst_bin, binSize, nRows,
 
     # Process each height increment
     for idx, inc in enumerate(h_incs):
-        vals = chunk["Z"] >= inc
+        vals = chunk_hag >= inc
         if np.sum(vals) > 0 and np.sum(vals) / nElems > 0.05:
             data_sub = chunk[vals]
+            hag_sub = chunk_hag[vals].astype(np.float64)
 
             # Create a DEM tile for the current height increment
-            csm = makeDemTile(data_sub["X"], data_sub["Y"], data_sub["Z"],
+            csm = makeDemTile(data_sub["X"], data_sub["Y"], hag_sub,
                 xst_bin, yst_bin, binSize, psize, nullVal=0, Linear=True)
 
             # Create a mask for areas above the current height increment
