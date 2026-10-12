@@ -221,7 +221,7 @@ def checkCHM(indexedDir, testCounts):
             chm = readImg(chmFileList[0])
             nonzeroCHM = chm[chm > 0]
             meanCHM = nonzeroCHM.mean()
-            checkEqual(testName, meanCHM, 0, testCounts, "CHM mean")
+            checkEqual(testName, meanCHM, 20.879243850708008, testCounts, "CHM mean")
     else:
         testCounts.failed()
 

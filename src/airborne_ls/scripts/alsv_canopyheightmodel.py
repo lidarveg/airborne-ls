@@ -171,11 +171,12 @@ def processOneTile(filename, cmdargs, outfile):
                 binPtsWithMarg["CLASSIFICATION"] <= const.PTCLASS_HIGHVEGETATION,
             )
 
-            chmVeg = gridding_methods.chm_alg(
-                binPtsWithMarg[vegPtsMask], binPtsWithMarg[vegPtsMask]['HAG'],
-                maxH_grid, pixSize, binTopLeftX, binTopLeftY,
-                binSize, nRowsPerBin, nColsPerBin, nullVal)
-            chmTile[binSlice] = chmVeg
+            hag = binPtsWithMarg[vegPtsMask]['HAG']
+            if len(hag) > 0:
+                chmVeg = gridding_methods.chm_alg(
+                    binPtsWithMarg[vegPtsMask], hag, maxH_grid, pixSize,
+                    binTopLeftX, binTopLeftY, binSize, nRowsPerBin, nColsPerBin, nullVal)
+                chmTile[binSlice] = chmVeg
 
             # Count return classes per-pixel
             classCountsShape = (CLASSCOUNTS_MAXCLASS + 1, nRowsPerBin, nColsPerBin)
