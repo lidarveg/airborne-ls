@@ -16,7 +16,7 @@ dependencies = [
     "laspy[lazrs]",
     "pyproj",
     "numba",
-    "pynninterp @ git+https://gitlab.com/jrsrp/sys/lidar/pynninterp@1.0.1",
+    "pynninterp @ git+https://gitlab.com/jrsrp/sys/lidar/pynninterp",
     "scipy>=1.10.0",
 ]
 
