@@ -31,6 +31,10 @@ as specified by the EPSG number given on the command line. If no `--epsg` is giv
 the first input file will be checked for projection information, but if given, it will
 over-ride anything found in the LAS files.
 
+The `--ii` option (and also `--ss` and `--pp`) relate to the naming of output files, which
+follows a strict structure. For more details on this, including known values for these
+options, the user should read [QVF Lidar filenames](https://jrsrp.gitlab.io/sys/meta_info/lidar_filename_codes/).
+
 The output files are always compressed (i.e. with `.laz` extension). They will be written
 with a minimum LAS format (currently defaults to LAS 1.4), and the data will be
 indexed into square bins of the given size. The file names conform to an internal 
