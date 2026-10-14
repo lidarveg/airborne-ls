@@ -172,7 +172,7 @@ def processOneTile(filename, cmdargs, outfile):
             )
 
             hag = binPtsWithMarg[vegPtsMask]['HAG']
-            if len(hag) > 0:
+            if len(hag) > 3:
                 chmVeg = gridding_methods.chm_alg(
                     binPtsWithMarg[vegPtsMask], hag, maxH_grid, pixSize,
                     binTopLeftX, binTopLeftY, binSize, nRowsPerBin, nColsPerBin, nullVal)
