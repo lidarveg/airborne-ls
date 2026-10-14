@@ -63,7 +63,7 @@ def main():
     # Run mosaic again, for DEM, to check the gap-fill
     runMosaic(indexedDir, testCounts, stagecode='bb0')
     checkFPC(indexedDir, testCounts)
-    checkCHM(indexedDir, testCounts)
+    checkCHM(indexedDir, testCounts, cmdargs.untiled)
     checkGapFill(indexedDir, testCounts)
     checkFlowAcc(indexedDir, testCounts)
 
@@ -256,11 +256,20 @@ def runMosaic(indexedDir, testCounts, stagecode=None):
         testCounts.failed()
 
 
-def checkCHM(indexedDir, testCounts):
+def checkCHM(indexedDir, testCounts, untiled):
     """
     Check the mosaiced CHM product
     """
     testName = "CheckCHM"
+
+    # Because of the median filter and binary dilation going on in the CHM smoothing,
+    # there is the potential for minor edge-of-tile effects, which will slightly change
+    # the expected meanCHM. We hold both answers here, and select according to whether we
+    # are running tiled or untiled.
+    if untiled:
+        trueMeanCHM = 20.879243850708008
+    else:
+        trueMeanCHM = 20.881576538085938
 
     chmFileList = glob.glob(f"{indexedDir}/*_bbnm6_r20cm.tif")
     if len(chmFileList) == 0:
@@ -270,7 +279,7 @@ def checkCHM(indexedDir, testCounts):
         chm = readImg(chmFileList[0])
         nonzeroCHM = chm[chm > 0]
         meanCHM = nonzeroCHM.mean()
-        checkEqual(testName, meanCHM, 20.879243850708008, testCounts, "CHM mean")
+        checkEqual(testName, meanCHM, trueMeanCHM, testCounts, "CHM mean")
 
 
 def runGapFill(indexedDir, testCounts):

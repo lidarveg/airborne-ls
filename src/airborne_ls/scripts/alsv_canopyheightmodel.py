@@ -192,7 +192,7 @@ def processOneTile(filename, cmdargs, outfile):
             del classCountsNonGround
             nonGroundClassesTile[binSlice] = nonGroundClasses
 
-    # Interpolating over buildings can be a problem - mask out affected pixels here
+    # Interpolating over buildings & water can be a problem - mask out affected pixels here
     veg_msk = np.logical_or(nonGroundClassesTile == const.PTCLASS_BUILDING,
                             nonGroundClassesTile == const.PTCLASS_WATER)
     struct2 = ndimage.generate_binary_structure(2, 2)
@@ -203,6 +203,13 @@ def processOneTile(filename, cmdargs, outfile):
     # Smooth out with a median filter, ignoring zeros
     masked_array = np.ma.masked_equal(chmTile, 0)
     chmTile = ndimage.median_filter(masked_array, size=3)
+
+    # NOTE: The two steps above, i.e. binary dilation of the building/water mask and the
+    # median filter of the CHM values, both have the potential to create edge-of-tile effects.
+    # These seem to be very minor, and are probably not a serious problem, but the only fix
+    # would be to run these steps later, after the tiles have been mosaiced together. This seems
+    # like a lot of unnecessary complexity, so for the moment we leave them here.
+    # See also the notes in alsv_testall.checkCHM() on coping with the difference.
 
     # Anything which is not canopy is set to null
     chmTile[chmTile < 0.5] = nullVal
