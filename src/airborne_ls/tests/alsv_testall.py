@@ -43,7 +43,7 @@ def main():
     testCounts = TestCounts()
     createTestData(lazfile, testCounts)
     checkStandardisation(lazfile, indexedDir, testCounts)
-#    checkAddHag(indexedDir, testCounts)
+    checkAddHag(indexedDir, testCounts)
 #    checkTileProd(indexedDir, testCounts)
 #    checkCHM(indexedDir, testCounts)
 #    checkGapFill(indexedDir, testCounts)
@@ -138,12 +138,16 @@ def checkAddHag(indexedDir, testCounts):
         stdLazfile = None
         outfileList = glob.glob(f"{indexedDir}/*.laz")
         stdLazfile = outfileList[0]
-        lazdata = laspy.read(stdLazfile)
-        hag = lazfile_rw.getHagArray(lazdata)
-        nonzeroHAG = hag[hag > 0]
-        checkEqual(testName, nonzeroHAG.min(), 9.140000343322754, testCounts, "HAG min value")
-        checkEqual(testName, nonzeroHAG.max(), 22.309999465942383, testCounts, "HAG max value")
-        checkEqual(testName, nonzeroHAG.mean(), 15.218514442443848, testCounts, "HAG mean value")
+        hagList = []
+        for stdLazfile in outfileList:
+            lazdata = laspy.read(stdLazfile)
+            hag = lazfile_rw.getHagArray(lazdata)
+            nonzeroHAG = hag[hag > 0]
+            hagList.append(nonzeroHAG)
+        allNonzeroHAG = np.concatenate(hagList)
+        checkEqual(testName, allNonzeroHAG.min(), 9.140000343322754, testCounts, "HAG min value")
+        checkEqual(testName, allNonzeroHAG.max(), 22.309999465942383, testCounts, "HAG max value")
+        checkEqual(testName, allNonzeroHAG.mean(), 15.218514442443848, testCounts, "HAG mean value")
     else:
         testCounts.failed()
 
@@ -154,7 +158,7 @@ def checkTileProd(indexedDir, testCounts):
     """
     testName = "TileProducts"
 
-    cmd = ['alsv_tile_products', '--indir', indexedDir, '--tilesize', '1000']
+    cmd = ['alsv_tile_products', '--indir', indexedDir, '--tilesize', '500']
     ok = runCmd(cmd, testName)
 
     if ok:
