@@ -593,7 +593,7 @@ def chm_alg(chunk, chunk_hag, maxH_hag, psize, xst_bin, yst_bin, binSize, nRows,
     # Process each height increment
     for idx, inc in enumerate(h_incs):
         vals = chunk_hag >= inc
-        if np.sum(vals) > 0 and np.sum(vals) / nElems > 0.05:
+        if np.count_nonzero(vals) > 3 and np.count_nonzero(vals) / nElems > 0.05:
             data_sub = chunk[vals]
             hag_sub = chunk_hag[vals].astype(np.float64)
 
