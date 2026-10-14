@@ -339,7 +339,7 @@ def checkFlowAcc(indexedDir, testCounts):
         else:
             testCounts.failed()
     else:
-        reportError(testName, "Gap-filled DEM file '{gfdemfile}' not found")
+        reportError(testName, f"Gap-filled DEM file '{gfdemfile}' not found")
         testCounts.failed()
 
 
