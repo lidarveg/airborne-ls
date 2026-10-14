@@ -19,6 +19,9 @@ from airborne_ls import qvf, lazfile_rw
 
 gdal.UseExceptions()
 
+INPUT_TILESIZE = 1000
+OUTPUT_TILESIZE = 500
+
 
 def getCmdargs():
     """
@@ -44,7 +47,14 @@ def main():
     createTestData(lazfile, testCounts)
     checkStandardisation(lazfile, indexedDir, testCounts)
     checkAddHag(indexedDir, testCounts)
-    checkTileProd(indexedDir, testCounts)
+    runTileProd(indexedDir, testCounts)
+    runCHM(indexedDir, testCounts)
+    runMosaic(indexedDir, testCounts)
+    checkDEM(indexedDir, testCounts)
+    runGapFill(indexedDir, testCounts)
+    # Run mosaic again, for DEM, to check the gap-fill
+    runMosaic(indexedDir, testCounts, stagecode='bb0')
+    checkFPC(indexedDir, testCounts)
     checkCHM(indexedDir, testCounts)
     checkGapFill(indexedDir, testCounts)
     checkFlowAcc(indexedDir, testCounts)
@@ -97,31 +107,31 @@ def checkStandardisation(lazfile, indexedDir, testCounts):
 
     projectName = "testpr"
     cmd = ['alsv_lidar_standardisation', '--infile', lazfile, '--outdir', indexedDir,
-           '--intilesize', '1000', '--ii', 'uk', '--project', projectName, '--year', '2025']
+           '--intilesize', f'{INPUT_TILESIZE}', '--outtilesize', f'{OUTPUT_TILESIZE}',
+           '--ii', 'uk', '--project', projectName, '--year', '2025']
     ok = runCmd(cmd, testName)
 
     if ok:
-        stdLazfile = None
         outfileList = glob.glob(f"{indexedDir}/*.laz")
-        if len(outfileList) == 0:
-            reportError(testName, "No standardised LAZ file found")
-            testCounts.failed()
-        elif len(outfileList) > 1:
-            reportError(testName, f"Found {len(outfileList)} output LAZ files")
-            testCounts.failed()
-        else:
-            stdLazfile = outfileList[0]
 
-        if stdLazfile is not None:
-            f = laspy.open(lazfile)
-            inHdr = f.header
-            f = laspy.open(outfileList[0])
+        numTiles = (INPUT_TILESIZE // OUTPUT_TILESIZE) ** 2
+        checkEqual(testName, len(outfileList), numTiles, testCounts, "Num tiled LAZ files")
+
+        f = laspy.open(lazfile)
+        inHdr = f.header
+
+        pointCount = 0
+        for stdLazfile in outfileList:
+            f = laspy.open(stdLazfile)
             stdHdr = f.header
 
-            checkEqual(testName, stdHdr.point_count, inHdr.point_count, testCounts,
-                "Output point count")
             epsg = stdHdr.parse_crs().to_epsg()
             checkEqual(testName, epsg, 28356, testCounts, "EPSG of standardised file")
+
+            pointCount += stdHdr.point_count
+
+        checkEqual(testName, pointCount, inHdr.point_count, testCounts,
+            "Output point count")
     else:
         testCounts.failed()
 
@@ -132,35 +142,38 @@ def checkAddHag(indexedDir, testCounts):
     """
     testName = "AddHAG"
 
-    cmd = ['alsv_addhag', '--indir', indexedDir]
+    cmd = ['alsv_addhag', '--indir', indexedDir, '--tilesize', f'{OUTPUT_TILESIZE}']
     ok = runCmd(cmd, testName)
 
     if ok:
         stdLazfile = None
         outfileList = glob.glob(f"{indexedDir}/*.laz")
         stdLazfile = outfileList[0]
-        lazdata = laspy.read(stdLazfile)
-        hag = lazfile_rw.getHagArray(lazdata)
-        nonzeroHAG = hag[hag > 0]
-        checkEqual(testName, nonzeroHAG.min(), 9.140000343322754, testCounts, "HAG min value")
-        checkEqual(testName, nonzeroHAG.max(), 22.309999465942383, testCounts, "HAG max value")
-        checkEqual(testName, nonzeroHAG.mean(), 15.218514442443848, testCounts, "HAG mean value")
+        hagList = []
+        for stdLazfile in outfileList:
+            lazdata = laspy.read(stdLazfile)
+            hag = lazfile_rw.getHagArray(lazdata)
+            nonzeroHAG = hag[hag > 0]
+            hagList.append(nonzeroHAG)
+        allNonzeroHAG = np.concatenate(hagList)
+        checkEqual(testName, allNonzeroHAG.min(), 9.140000343322754, testCounts, "HAG min value")
+        checkEqual(testName, allNonzeroHAG.max(), 22.309999465942383, testCounts, "HAG max value")
+        checkEqual(testName, allNonzeroHAG.mean(), 15.218514442443848, testCounts, "HAG mean value")
     else:
         testCounts.failed()
 
 
-def checkTileProd(indexedDir, testCounts):
+def runTileProd(indexedDir, testCounts):
     """
-    Check the raster tile products
+    Run the raster tile products
     """
     testName = "TileProducts"
 
-    cmd = ['alsv_tile_products', '--indir', indexedDir, '--tilesize', '1000']
+    cmd = ['alsv_tile_products', '--indir', indexedDir, '--tilesize', f'{OUTPUT_TILESIZE}']
     ok = runCmd(cmd, testName)
 
     if ok:
-        checkDEM(indexedDir, testCounts)
-        checkFPC(indexedDir, testCounts)
+        testCounts.passed()
     else:
         testCounts.failed()
 
@@ -171,7 +184,7 @@ def checkDEM(indexedDir, testCounts):
     """
     testName = "checkDEM"
     nullVal = -999.0
-    demfileList = glob.glob(f"{indexedDir}/*/*_bb0m6_ldem_*.tif")
+    demfileList = glob.glob(f"{indexedDir}/*_bb0m6_r50cm.tif")
     if len(demfileList) == 0:
         reportError(testName, "DEM file not found")
         testCounts.failed()
@@ -189,7 +202,7 @@ def checkFPC(indexedDir, testCounts):
     Find the FPC image and do some simple checks
     """
     testName = "checkFPC"
-    fpcfileList = glob.glob(f"{indexedDir}/*/*_bbhm6_lfpc_*.tif")
+    fpcfileList = glob.glob(f"{indexedDir}/*_bbhm6_r10m.tif")
     if len(fpcfileList) == 0:
         reportError(testName, "FPC file not found")
         testCounts.failed()
@@ -203,52 +216,88 @@ def checkFPC(indexedDir, testCounts):
             "Forest FPC mean")
 
 
-def checkCHM(indexedDir, testCounts):
+def runCHM(indexedDir, testCounts):
     """
-    Check canopy height model
+    Run canopy height model
     """
     testName = "checkCHM"
 
-    cmd = ['alsv_canopyheightmodel', '--indir', indexedDir, '--tilesize', '1000']
+    cmd = ['alsv_canopyheightmodel', '--indir', indexedDir, '--tilesize', f'{OUTPUT_TILESIZE}']
     ok = runCmd(cmd, testName)
 
     if ok:
-        chmFileList = glob.glob(f"{indexedDir}/*/*_bbnm6_lchm_*.tif")
-        if len(chmFileList) == 0:
-            reportError(testName, "CHM file not found")
-            testCounts.failed()
-        else:
-            chm = readImg(chmFileList[0])
-            nonzeroCHM = chm[chm > 0]
-            meanCHM = nonzeroCHM.mean()
-            checkEqual(testName, meanCHM, 20.879243850708008, testCounts, "CHM mean")
+        testCounts.passed()
+    else:
+        testCounts.failed()
+
+
+def runMosaic(indexedDir, testCounts, stagecode=None):
+    """
+    Run the mosaic command
+    """
+    testName = "Mosaic"
+
+    cmd = ['alsv_product_mosaic', '--indir', indexedDir]
+    if stagecode is not None:
+        cmd.extend(['--stagecode', stagecode])
+    ok = runCmd(cmd, testName)
+
+    if ok:
+        testCounts.passed()
+    else:
+        testCounts.failed()
+
+
+def checkCHM(indexedDir, testCounts):
+    """
+    Check the mosaiced CHM product
+    """
+    testName = "CheckCHM"
+
+    chmFileList = glob.glob(f"{indexedDir}/*_bbnm6_r20cm.tif")
+    if len(chmFileList) == 0:
+        reportError(testName, "CHM file not found")
+        testCounts.failed()
+    else:
+        chm = readImg(chmFileList[0])
+        nonzeroCHM = chm[chm > 0]
+        meanCHM = nonzeroCHM.mean()
+        checkEqual(testName, meanCHM, 20.879243850708008, testCounts, "CHM mean")
+
+
+def runGapFill(indexedDir, testCounts):
+    """
+    Run the dem_gapfill command
+    """
+    testName = "runDEMGapFill"
+
+    cmd = ['alsv_dem_gapfill', '--indir', indexedDir]
+    ok = runCmd(cmd, testName)
+
+    if ok:
+        testCounts.passed()
     else:
         testCounts.failed()
 
 
 def checkGapFill(indexedDir, testCounts):
     """
-    Check the dem_gapfill command
+    Check the gap-filled DEM mosaic
     """
     testName = "GapFillDEM"
     nullVal = -999.0
 
-    cmd = ['alsv_dem_gapfill', '--indir', indexedDir]
-    ok = runCmd(cmd, testName)
-    if ok:
-        gfdemList = glob.glob(f"{indexedDir}/*/*_bb0m6_lgapfilleddem_*.tif")
-        if len(gfdemList) == 0:
-            reportError(testName, "No gap-filled dem found")
-            testCounts.failed()
-        else:
-            dem = readImg(gfdemList[0])
-            nullCount = np.count_nonzero(dem == nullVal)
-            (minHgt, maxHgt) = (dem[dem != nullVal].min(), dem.max())
-            checkEqual(testName, minHgt, 68.34, testCounts, "Min hgt")
-            checkEqual(testName, maxHgt, 148.74, testCounts, "Max hgt")
-            checkEqual(testName, nullCount, 0, testCounts, "Null count")
-    else:
+    gfdemList = glob.glob(f"{indexedDir}/*_bb0m6_r50cm.tif")
+    if len(gfdemList) == 0:
+        reportError(testName, "No gap-filled dem found")
         testCounts.failed()
+    else:
+        dem = readImg(gfdemList[0])
+        nullCount = np.count_nonzero(dem == nullVal)
+        (minHgt, maxHgt) = (dem[dem != nullVal].min(), dem.max())
+        checkEqual(testName, minHgt, 68.34, testCounts, "Min hgt")
+        checkEqual(testName, maxHgt, 148.74, testCounts, "Max hgt")
+        checkEqual(testName, nullCount, 0, testCounts, "Null count")
 
 
 def checkFlowAcc(indexedDir, testCounts):
@@ -257,14 +306,14 @@ def checkFlowAcc(indexedDir, testCounts):
     """
     testName = "FlowAcc"
 
-    gfdemList = glob.glob(f"{indexedDir}/*/*_bb0m6_lgapfilleddem_*.tif")
+    gfdemList = glob.glob(f"{indexedDir}/*_bb0m6_r50cm.tif")
     if len(gfdemList) == 1:
         gfdemfile = gfdemList[0]
     else:
         gfdemfile = None
 
     if gfdemfile is not None and os.path.exists(gfdemfile):
-        flowaccfile = qvf.setoptionfield(gfdemfile, 'l', 'flowacc')
+        flowaccfile = qvf.setstagecode(gfdemfile, 'bbq')
         cmd = ['alsv_flowacc', gfdemfile, '--outfile', flowaccfile]
         ok = runCmd(cmd, testName)
         if ok:
