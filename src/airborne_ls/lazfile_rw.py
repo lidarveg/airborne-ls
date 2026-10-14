@@ -459,6 +459,8 @@ def standardise_lasf(what, when, utmZone, projectionCode, stageCode, projectName
                     data2 = data[good_indices]
                     new_hdr = copy(data.header)
                     new_hdr.point_count = 0
+                    # Make sure we have a new copy of the VLR list
+                    new_hdr.vlrs = laspy.vlrs.vlrlist.VLRList([vlr for vlr in data.header.vlrs])
                     new_las = laspy.LasData(new_hdr)
 
                     ##########################################################################
