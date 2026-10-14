@@ -423,19 +423,18 @@ def standardise_lasf(what, when, utmZone, projectionCode, stageCode, projectName
         skipexisting (bool): If true, skip file if output file already exists
 
     """
-    segments = np.arange(0, int(tile_s), int(out_tile_s))
-
     stageAndZone = f"{stageCode}{projectionCode}"
     outfileTemplate = qvf.assemblefields([what, 'TILENAME', when, stageAndZone])
     outfileTemplate = qvf.setoptionfield(outfileTemplate, 'p', projectName)
     outfileTemplate = qvf.setsuffix(outfileTemplate, 'laz')
     outfileTemplate = os.path.join(outdir, outfileTemplate)
 
-    for tile_x in segments:
-        for tile_y in segments:
-            northing_new = int(northing - tile_y)
-            easting_new = int(easting + tile_x)
-            tileWhere = qvf.makeTileWhere(easting, northing, utmZone)
+    numTiles = int(tile_s / out_tile_s)
+    for tileRow in range(numTiles):
+        for tileCol in range(numTiles):
+            northing_new = int(northing - tileRow * out_tile_s)
+            easting_new = int(easting + tileCol * out_tile_s)
+            tileWhere = qvf.makeTileWhere(easting_new, northing_new, utmZone)
             outFile = qvf.setwhere(outfileTemplate, tileWhere)
 
             if not (skipexisting and os.path.exists(outFile)):
