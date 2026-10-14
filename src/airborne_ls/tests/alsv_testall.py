@@ -30,6 +30,9 @@ def getCmdargs():
     p = argparse.ArgumentParser()
     p.add_argument("--keep", default=False, action="store_true",
         help="Keep test files after completion (default will delete them all)")
+    p.add_argument("--untiled", default=False, action="store_true",
+        help=("Run input as one big tile. Default divides it into 4 smaller tiles. " +
+              "Very helpful in checking for errors which may be a result of the tiling"))
     return p.parse_args()
 
 
@@ -39,16 +42,21 @@ def main():
     """
     cmdargs = getCmdargs()
 
+    if cmdargs.untiled:
+        tileSize = INPUT_TILESIZE
+    else:
+        tileSize = INPUT_TILESIZE // 2
+
     tmpdir = tempfile.mkdtemp(prefix='alsv_tests_', suffix='.tmpd', dir='.')
     lazfile = os.path.join(tmpdir, 'testpoints.laz')
     indexedDir = os.path.join(tmpdir, 'indexedlaz')
 
     testCounts = TestCounts()
     createTestData(lazfile, testCounts)
-    checkStandardisation(lazfile, indexedDir, testCounts)
-    checkAddHag(indexedDir, testCounts)
-    runTileProd(indexedDir, testCounts)
-    runCHM(indexedDir, testCounts)
+    checkStandardisation(lazfile, indexedDir, testCounts, tileSize)
+    checkAddHag(indexedDir, testCounts, tileSize)
+    runTileProd(indexedDir, testCounts, tileSize)
+    runCHM(indexedDir, testCounts, tileSize)
     runMosaic(indexedDir, testCounts)
     checkDEM(indexedDir, testCounts)
     runGapFill(indexedDir, testCounts)
@@ -93,7 +101,7 @@ def createTestData(lazfile, testCounts):
         checkEqual(testName, epsg, 28356, testCounts, "EPSG")
 
 
-def checkStandardisation(lazfile, indexedDir, testCounts):
+def checkStandardisation(lazfile, indexedDir, testCounts, outTileSize):
     """
     Test standardisation of LAZ files
     """
@@ -107,14 +115,14 @@ def checkStandardisation(lazfile, indexedDir, testCounts):
 
     projectName = "testpr"
     cmd = ['alsv_lidar_standardisation', '--infile', lazfile, '--outdir', indexedDir,
-           '--intilesize', f'{INPUT_TILESIZE}', '--outtilesize', f'{OUTPUT_TILESIZE}',
+           '--intilesize', f'{INPUT_TILESIZE}', '--outtilesize', f'{outTileSize}',
            '--ii', 'uk', '--project', projectName, '--year', '2025']
     ok = runCmd(cmd, testName)
 
     if ok:
         outfileList = glob.glob(f"{indexedDir}/*.laz")
 
-        numTiles = (INPUT_TILESIZE // OUTPUT_TILESIZE) ** 2
+        numTiles = (INPUT_TILESIZE // outTileSize) ** 2
         checkEqual(testName, len(outfileList), numTiles, testCounts, "Num tiled LAZ files")
 
         f = laspy.open(lazfile)
@@ -136,13 +144,13 @@ def checkStandardisation(lazfile, indexedDir, testCounts):
         testCounts.failed()
 
 
-def checkAddHag(indexedDir, testCounts):
+def checkAddHag(indexedDir, testCounts, tileSize):
     """
     Test the alsv_addhag command
     """
     testName = "AddHAG"
 
-    cmd = ['alsv_addhag', '--indir', indexedDir, '--tilesize', f'{OUTPUT_TILESIZE}']
+    cmd = ['alsv_addhag', '--indir', indexedDir, '--tilesize', f'{tileSize}']
     ok = runCmd(cmd, testName)
 
     if ok:
@@ -163,13 +171,13 @@ def checkAddHag(indexedDir, testCounts):
         testCounts.failed()
 
 
-def runTileProd(indexedDir, testCounts):
+def runTileProd(indexedDir, testCounts, tileSize):
     """
     Run the raster tile products
     """
     testName = "TileProducts"
 
-    cmd = ['alsv_tile_products', '--indir', indexedDir, '--tilesize', f'{OUTPUT_TILESIZE}']
+    cmd = ['alsv_tile_products', '--indir', indexedDir, '--tilesize', f'{tileSize}']
     ok = runCmd(cmd, testName)
 
     if ok:
@@ -216,13 +224,13 @@ def checkFPC(indexedDir, testCounts):
             "Forest FPC mean")
 
 
-def runCHM(indexedDir, testCounts):
+def runCHM(indexedDir, testCounts, tileSize):
     """
     Run canopy height model
     """
-    testName = "checkCHM"
+    testName = "runCHM"
 
-    cmd = ['alsv_canopyheightmodel', '--indir', indexedDir, '--tilesize', f'{OUTPUT_TILESIZE}']
+    cmd = ['alsv_canopyheightmodel', '--indir', indexedDir, '--tilesize', f'{tileSize}']
     ok = runCmd(cmd, testName)
 
     if ok:
@@ -235,7 +243,7 @@ def runMosaic(indexedDir, testCounts, stagecode=None):
     """
     Run the mosaic command
     """
-    testName = "Mosaic"
+    testName = "runMosaic"
 
     cmd = ['alsv_product_mosaic', '--indir', indexedDir]
     if stagecode is not None:
@@ -284,7 +292,7 @@ def checkGapFill(indexedDir, testCounts):
     """
     Check the gap-filled DEM mosaic
     """
-    testName = "GapFillDEM"
+    testName = "checkGapFillDEM"
     nullVal = -999.0
 
     gfdemList = glob.glob(f"{indexedDir}/*_bb0m6_r50cm.tif")
