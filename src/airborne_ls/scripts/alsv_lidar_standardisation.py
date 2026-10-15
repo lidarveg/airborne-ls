@@ -89,6 +89,9 @@ def getCmdargs(inputargs):
     parser.add_argument("--minlasversion", default="1.4",
         help=("Minimum LAS format version for output files (default=%(default)s). " +
               "Newer format input files will preserve their newer version"))
+    parser.add_argument("--noparallelread", default=False, action="store_true",
+        help=("Disable laspy's parallel reading of LAS/LAZ files. By default, laspy will " +
+              "try to use as many CPU cores as it can"))
 
     # Tile dimensions
     parser.add_argument("--intilesize", required=True, type=int,
@@ -214,9 +217,11 @@ def run_las_standardisation(cmdargs):
     stageCode = getStageCode(cmdargs)
     classesToExclude = [int(i) for i in cmdargs.excludeclasses.split(',')]
 
+    laspyBackend = lazfile_rw.chooseLaspyBackend(cmdargs.noparallelread)
+
     for inLazfile in infileList:
         print(f"Processing LAS/LAZ file: {inLazfile}")
-        data = laspy.read(inLazfile)
+        data = laspy.read(inLazfile, laz_backend=laspyBackend)
         # Convert to older formats to the requested LAS version.
         if data.header.version < cmdargs.minlasversion:
             data = laspy.convert(data, file_version=cmdargs.minlasversion)

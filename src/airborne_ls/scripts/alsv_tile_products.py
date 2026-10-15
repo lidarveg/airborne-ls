@@ -111,6 +111,9 @@ def getCmdargs(inputargs):
         help=("Percentage of points from neighbouring bins to keep for per-bin " +
             "DEM interpolation (default=%(default)s). Smaller values will run faster, " +
             "but too small can leave extra holes in DEM"))
+    parser.add_argument("--noparallelread", default=False, action="store_true",
+        help=("Disable laspy's parallel reading of LAS/LAZ files. By default, laspy will " +
+              "try to use as many CPU cores as it can"))
     parser.add_argument("--driver", default='GTiff',
         help="GDAL driver for output image format (default=%(default)s)")
     parser.add_argument("--reporttimings", default=False, action="store_true",
@@ -219,7 +222,8 @@ def run_tile_products(cmdargs):
             # binnedData stores the point data in chunks/bins for rapid access
             with timings.interval('readbindata'):
                 binnedData = lazfile_rw.readBinnedData(infileFull,
-                    tileSize=cmdargs.tilesize, withNeighbours=True)
+                    tileSize=cmdargs.tilesize, withNeighbours=True,
+                    noParallelRead=cmdargs.noparallelread)
             where = qvf.getwhere(infileFull)
             (easting, northing, utmZone) = filenaming_methods.decomposeWhereField(where)
 
