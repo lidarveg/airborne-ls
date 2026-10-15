@@ -90,7 +90,7 @@ class BinnedData:
     """
     Hold the point data from a LAZ file, divided into bins as-per the index
     """
-    def __init__(self, filename, row=None, col=None, includeHAG=True):
+    def __init__(self, filename, row=None, col=None, includeHAG=True, noParallelRead=False):
         """
         Open the file, and read data into binned structure. Limit to nominated row or
         col if required. If both row and col are given, then only the intersecting bin
@@ -102,8 +102,10 @@ class BinnedData:
                           are given, only the intersecting bin is loaded.
           includeHAG (bool): If True, also load the Height Above Ground data (if present),
                              and include this in the recarrays for each bin
+          noParallelRead (bool): If True, prevent laspy from doing parallel reading
         """
-        f = laspy.open(filename)
+        laspyBackend = chooseLaspyBackend(noParallelRead)
+        f = laspy.open(filename, laz_backend=laspyBackend)
         self.ndx = LazNdx(f)
         self.dataByBin = {}
         # We assume that tiles are always square, and thus same number of bin rows as cols
@@ -276,7 +278,8 @@ class BinnedData:
             self.setData(-1, numBinCols, other.getData(otherNrows - 1, 0))
 
 
-def readBinnedData(filename, tileSize=None, withNeighbours=False, includeHAG=True):
+def readBinnedData(filename, tileSize=None, withNeighbours=False, includeHAG=True,
+        noParallelRead=False):
     """
     Read point data from the given LAZ file, divide into bins according to the stored index
 
@@ -291,6 +294,7 @@ def readBinnedData(filename, tileSize=None, withNeighbours=False, includeHAG=Tru
                              our standard internal file naming.
       includeHAG (bool): If True, also load the Height Above Ground data (if present),
                          and include this in the recarrays for each bin
+      noParallelRead (bool): If True, prevent laspy from doing parallel reading
 
     Returns:
       (BinnedData): The data for the tile, binned by the index
@@ -298,7 +302,7 @@ def readBinnedData(filename, tileSize=None, withNeighbours=False, includeHAG=Tru
     if withNeighbours and (tileSize is None):
         raise ValueError("withNeighbours requires tileSize")
 
-    binnedData = BinnedData(filename, includeHAG=includeHAG)
+    binnedData = BinnedData(filename, includeHAG=includeHAG, noParallelRead=noParallelRead)
     if withNeighbours:
         offsetByDirection = {
             'SW': (-tileSize, -tileSize), 'S': (0, -tileSize), 'SE': (tileSize, -tileSize),
@@ -319,7 +323,8 @@ def readBinnedData(filename, tileSize=None, withNeighbours=False, includeHAG=Tru
             nbrFilename = qvf.setwhere(filename, nbrWhere)
             if os.path.exists(nbrFilename):
                 (row, col) = rowColToRequest[direction]
-                nbrBinnedData = BinnedData(nbrFilename, row=row, col=col, includeHAG=includeHAG)
+                nbrBinnedData = BinnedData(nbrFilename, row=row, col=col, includeHAG=includeHAG,
+                    noParallelRead=noParallelRead)
                 binnedData.mergeNeighbour(nbrBinnedData, direction)
 
     return binnedData
@@ -396,7 +401,7 @@ def laspy2rec(infile):
 ###################################################################################################
 def standardise_lasf(what, when, utmZone, projectionCode, stageCode, projectName, outdir,
         data, easting, northing, tile_s, out_tile_s, binSize, filename_Parent,
-        classesToExclude, minZ, maxZ, skipexisting):
+        classesToExclude, minZ, maxZ, skipexisting, laspyBackend):
     """
     Using laspy, rename file using naming convention, add index, remove noise and write out
     supplied files to .laz
@@ -421,6 +426,7 @@ def standardise_lasf(what, when, utmZone, projectionCode, stageCode, projectName
         minZ, maxZ (float): Min and max acceptable values (metres) for point height.
                             Heights outside this range will be discarded as errors.
         skipexisting (bool): If true, skip file if output file already exists
+        laspyBackend (LazBackend): Backend to use for writing output LAZ files
 
     """
     stageAndZone = f"{stageCode}{projectionCode}"
@@ -515,7 +521,7 @@ def standardise_lasf(what, when, utmZone, projectionCode, stageCode, projectName
                         raise ValueError(msg)
                     ###################################
                     new_las.points = data2.points.copy()
-                    new_las.write(outFile)
+                    new_las.write(outFile, laz_backend=laspyBackend)
 
                     # check file is not corrupted.
                     with laspy.open(outFile) as las:
@@ -541,6 +547,33 @@ def standardise_lasf(what, when, utmZone, projectionCode, stageCode, projectName
                 print(f"Skipping outfile {outFile}, as it already exists")
 
     del data
+
+
+def chooseLaspyBackend(noParallelRead):
+    """
+    Choose a suitable backend for laspy, to either allow or disallow
+    parallel reading of LAS files.
+
+    By default, laspy will read a LAS/LAZ file using as many CPU cores as it can find. In
+    some computing environments this may cause problems, and so one may wish to disable
+    this behaviour.
+
+    Paremeters:
+      noParallelRead (bool): If True, then select a backend which will not allow parallel reads
+
+    Returns:
+      backend (LazBackend): The selected backend enum value, or None. If None, then laspy
+                            will choose its favourite backend (probably with parallel reading).
+    """
+    backend = None
+    if (not noParallelRead) and hasattr(laspy.compression.LazBackend, 'LazrsParallel'):
+        backend = laspy.compression.LazBackend.LazrsParallel
+    elif noParallelRead and hasattr(laspy.compression.LazBackend, 'Lazrs'):
+        backend = laspy.compression.LazBackend.Lazrs
+    # This is just the backends provided with lazrs. If we are using some other backend, we can add
+    # some more elif cases
+
+    return backend
 
 
 ###################################################################################################
@@ -893,7 +926,7 @@ def run_zipf(fn, laz_flist, outdr, stagecode="ba2"):
     print(f"{fn_out} zip file created: {archive_name}")
 
 
-def addHagEvlr(filename, hag):
+def addHagEvlr(filename, hag, noParallelRead=False):
     """
     Add HAG as EVLR, to the given LAS file
 
@@ -901,8 +934,10 @@ def addHagEvlr(filename, hag):
       filename (str): Name of existing LAS/LAZ file
       hag (numpy array): Array of values of height above ground, for every point
                          in the file, in the same order
+      noParallelRead (bool): If True, prevent laspy from doing parallel reading
     """
-    data = laspy.read(filename)
+    laspyBackend = chooseLaspyBackend(noParallelRead)
+    data = laspy.read(filename, laz_backend=laspyBackend)
     dirname = os.path.dirname(filename)
     (fd, tmpfilename) = tempfile.mkstemp(prefix='alsv_tmp_', suffix='.laz', dir=dirname)
     os.close(fd)
@@ -935,7 +970,7 @@ def addHagEvlr(filename, hag):
                                  description="Height Above Ground (cm)",
                                  record_data=hagPacked)
     data.evlrs.append(hagEvlr)
-    data.write(tmpfilename)
+    data.write(tmpfilename, laz_backend=laspyBackend)
     os.replace(tmpfilename, filename)
 
 

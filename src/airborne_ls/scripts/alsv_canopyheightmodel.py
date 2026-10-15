@@ -55,6 +55,9 @@ def getCmdargs():
         help=("Percentage of points from neighbouring bins to keep for per-bin " +
             "DEM interpolation (default=%(default)s). Smaller values will run faster, " +
             "but too small can leave extra holes in DEM"))
+    p.add_argument("--noparallelread", default=False, action="store_true",
+        help=("Disable laspy's parallel reading of LAS/LAZ files. By default, laspy will " +
+              "try to use as many CPU cores as it can"))
     p.add_argument("--driver", default='GTiff',
         help="GDAL driver for output image format (default=%(default)s)")
     p.add_argument("--skipexisting", default=False, action="store_true",
@@ -133,7 +136,8 @@ def processOneTile(filename, cmdargs, outfile):
     nonGroundClassesTile = np.full(tileShape, 254, dtype=np.uint8)
 
     binnedData = lazfile_rw.readBinnedData(filename,
-        tileSize=cmdargs.tilesize, withNeighbours=True)
+        tileSize=cmdargs.tilesize, withNeighbours=True,
+        noParallelRead=cmdargs.noparallelread)
     where = qvf.getwhere(filename)
     (easting, northing, utmZone) = filenaming_methods.decomposeWhereField(where)
 

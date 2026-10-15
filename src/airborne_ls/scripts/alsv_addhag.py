@@ -32,6 +32,9 @@ def getCmdargs():
         help=("Percentage of points from neighbouring bins to keep for per-bin " +
             "DEM interpolation (default=%(default)s). Smaller values will run faster, " +
             "but too small can leave extra holes in DEM"))
+    p.add_argument("--noparallelread", default=False, action="store_true",
+        help=("Disable laspy's parallel reading (& writing) of LAS/LAZ files. By default, " +
+              "laspy will try to use as many CPU cores as it can"))
 
     cmdargs = p.parse_args()
     return cmdargs
@@ -57,12 +60,12 @@ def main():
         tileName = qvf.getwhere(filename)
         (easting, northing, _) = filenaming_methods.decomposeWhereField(tileName)
         binnedData = lazfile_rw.readBinnedData(filename, tileSize=cmdargs.tilesize,
-            withNeighbours=True, includeHAG=False)
+            withNeighbours=True, includeHAG=False, noParallelRead=cmdargs.noparallelread)
         hag = gridding_methods.calcHeightAboveGroundAllBins(binnedData, cmdargs.binmargin,
                 easting, northing)
         del binnedData
 
-        lazfile_rw.addHagEvlr(filename, hag)
+        lazfile_rw.addHagEvlr(filename, hag, noParallelRead=cmdargs.noparallelread)
 
 
 if __name__ == "__main__":
