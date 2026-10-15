@@ -90,8 +90,8 @@ def getCmdargs(inputargs):
         help=("Minimum LAS format version for output files (default=%(default)s). " +
               "Newer format input files will preserve their newer version"))
     parser.add_argument("--noparallelread", default=False, action="store_true",
-        help=("Disable laspy's parallel reading of LAS/LAZ files. By default, laspy will " +
-              "try to use as many CPU cores as it can"))
+        help=("Disable laspy's parallel reading (& writing) of LAS/LAZ files. By default, " +
+              "laspy will try to use as many CPU cores as it can"))
 
     # Tile dimensions
     parser.add_argument("--intilesize", required=True, type=int,
@@ -241,7 +241,7 @@ def run_las_standardisation(cmdargs):
         lazfile_rw.standardise_lasf(what, when, utmZone, projectionCode, stageCode,
             cmdargs.project, cmdargs.outdir, data, easting, northing, inTilesize,
             cmdargs.outtilesize, cmdargs.binsize, inLazfile, classesToExclude,
-            cmdargs.minz, cmdargs.maxz, cmdargs.skipexisting)
+            cmdargs.minz, cmdargs.maxz, cmdargs.skipexisting, laspyBackend)
 
         del data
 

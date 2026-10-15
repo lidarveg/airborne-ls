@@ -401,7 +401,7 @@ def laspy2rec(infile):
 ###################################################################################################
 def standardise_lasf(what, when, utmZone, projectionCode, stageCode, projectName, outdir,
         data, easting, northing, tile_s, out_tile_s, binSize, filename_Parent,
-        classesToExclude, minZ, maxZ, skipexisting):
+        classesToExclude, minZ, maxZ, skipexisting, laspyBackend):
     """
     Using laspy, rename file using naming convention, add index, remove noise and write out
     supplied files to .laz
@@ -426,6 +426,7 @@ def standardise_lasf(what, when, utmZone, projectionCode, stageCode, projectName
         minZ, maxZ (float): Min and max acceptable values (metres) for point height.
                             Heights outside this range will be discarded as errors.
         skipexisting (bool): If true, skip file if output file already exists
+        laspyBackend (LazBackend): Backend to use for writing output LAZ files
 
     """
     stageAndZone = f"{stageCode}{projectionCode}"
@@ -520,7 +521,7 @@ def standardise_lasf(what, when, utmZone, projectionCode, stageCode, projectName
                         raise ValueError(msg)
                     ###################################
                     new_las.points = data2.points.copy()
-                    new_las.write(outFile)
+                    new_las.write(outFile, laz_backend=laspyBackend)
 
                     # check file is not corrupted.
                     with laspy.open(outFile) as las:
@@ -969,7 +970,7 @@ def addHagEvlr(filename, hag, noParallelRead=False):
                                  description="Height Above Ground (cm)",
                                  record_data=hagPacked)
     data.evlrs.append(hagEvlr)
-    data.write(tmpfilename)
+    data.write(tmpfilename, laz_backend=laspyBackend)
     os.replace(tmpfilename, filename)
 
 
