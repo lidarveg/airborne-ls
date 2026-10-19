@@ -14,6 +14,20 @@ These are processed using the commands described below. All of these commands wi
 accept a `-h` or `--help` option to print brief help on all options. Many command line
 options will have sensible default values, but these should be checked for suitability.
 
+## Re-tiling LAS/LAZ files
+The supplied LAS/LAZ files may occasionally be provided in the form of un-tiled flightlines.
+In this case, it is necessary to re-tile as an independent first step, before attempting to
+ingest and standardize the tiles. This step is not generally necessary if the data is supplied
+in tiles already.
+
+Example:
+```bash
+alsv_retilelas --indir alsProjectDir --outdir alsProjectDir-tiled --tilesize 1000
+```
+
+The resulting tiles are uncompressed LAS files, and are intended to be a temporary step between
+the raw supplied files and the standardized, indexed LAZ files produced in the next step.
+
 ## Standardise the LAS/LAZ files
 The supplied LAS/LAZ files are expected to be in a single directory. The first command
 to run will ingest these, and re-write them into a different directory, with a spatial
