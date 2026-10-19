@@ -42,6 +42,13 @@ def getCmdargs():
         msg = "--outdir must be different to --indir"
         raise ValueError(msg)
 
+    if not os.path.exists(cmdargs.outdir):
+        msg = f"Out directory '{cmdargs.outdir}' does not exist"
+        raise ValueError(msg)
+    if not os.path.isdir(cmdargs.outdir):
+        msg = f"Out directory '{cmdargs.outdir}' is not a directory"
+        raise ValueError(msg)
+
     lasVersNum = tuple([int(i) for i in cmdargs.minlasversion.split('.')])
     if len(lasVersNum) > 2:
         msg = f"LAS version {cmdargs.minlasversion} has too many components ({len(lasVersNum)})"
