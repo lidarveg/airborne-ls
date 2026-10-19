@@ -18,3 +18,5 @@ See [doc/INSTALLATION.md](doc/INSTALLATION.md) for details on dependencies and i
 ## Usage
 
 See [doc/USAGE.md](doc/USAGE.md) for details on using the commands.
+
+For suggestions on how these scripts may best fit into a batch queue environment, see [doc/BATCHING.md](doc/BATCHING.md).
