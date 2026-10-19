@@ -21,6 +21,7 @@ dependencies = [
 ]
 
 [project.scripts]
+alsv_retilelas = "airborne_ls.scripts.alsv_retilelas:main"
 alsv_lidar_standardisation = "airborne_ls.scripts.alsv_lidar_standardisation:main"
 alsv_addhag = "airborne_ls.scripts.alsv_addhag:main"
 alsv_canopyheightmodel = "airborne_ls.scripts.alsv_canopyheightmodel:main"
