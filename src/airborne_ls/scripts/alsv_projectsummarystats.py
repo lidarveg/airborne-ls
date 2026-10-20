@@ -8,6 +8,8 @@ import glob
 import numpy as np
 import laspy
 
+from airborne_ls import plotting
+
 
 def getCmdargs():
     p = argparse.ArgumentParser()
@@ -53,7 +55,7 @@ def main():
     allMax = np.array(maxList).max(axis=0)
     allSize = np.array(sizeList)
     sizeXY = np.median(allSize, axis=0)
-    avgPointDensity = totalPoints / totalArea
+    meanPointDensity = totalPoints / totalArea
     densityArr = np.array(densityList)
 
     crs = hdr.parse_crs()
@@ -69,14 +71,10 @@ def main():
     print(f"Projection EPSG: {epsg}")
     print(f"Num files: {len(filelist)}")
     print(f"Total area: {int(round(totalArea / 1E6))} sq-km")
-    print(f"Average point density: {avgPointDensity:.1f} pts/sq-m")
-    print("Point density distribution (over tiles)")
-    print("    Min: {:.1f}".format(densityArr.min()))
-    print("    Percentile 25: {:.1f}".format(np.percentile(densityArr, 25)))
-    print("    Median: {:.1f}".format(np.median(densityArr)))
-    print("    Percentile 75: {:.1f}".format(np.percentile(densityArr, 75)))
-    print("    Max: {:.1f}".format(densityArr.max()))
-    print("Data ranges")
+    print(f"Mean point density: {meanPointDensity:.1f} pts/sq-m")
+    print("\nPoint density distribution (over tiles). Boxplot whiskers at 5th & 95th percentile")
+    plotting.asciiBoxplot(densityArr, None)
+    print("\nData ranges")
     print(f"    X: [{allMin[0]:.2f}, {allMax[0]:.2f}]")
     print(f"    Y: [{allMin[1]:.2f}, {allMax[1]:.2f}]")
     print(f"    Z: [{allMin[2]:.2f}, {allMax[2]:.2f}]")
