@@ -39,4 +39,4 @@ VLR_RECORDID_BINSIZE = 1            # (float64, uint64)
 VLR_RECORDID_BINBOUNDS = 2          # All uint64
 
 # EVLR record for Height Above Ground
-VLR_RECORDID_HAG = 3               # All uint16, centimetres
+VLR_RECORDID_HAG = 3               # All int16, centimetres
