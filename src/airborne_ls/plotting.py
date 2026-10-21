@@ -42,11 +42,10 @@ def asciiBoxplot(values, title, leftMargin=5, width=80):
     # Construct the boxplot itself. Min & max are 'o', whiskers are '-',
     # box is '=' and median is '|'
     plotLine = np.array([' '] * (width + leftMargin + 1))
-    plotLine[critVals_char[0]] = 'o'
-    plotLine[critVals_char[1]:critVals_char[2]] = '-'
+    plotLine[critVals_char[1]:critVals_char[5]] = '-'
     plotLine[critVals_char[2]:critVals_char[4]] = '='
     plotLine[critVals_char[3]] = '|'
-    plotLine[critVals_char[4]:critVals_char[5]] = '-'
+    plotLine[critVals_char[0]] = 'o'
     plotLine[critVals_char[6]] = 'o'
     plotLineStr = ''.join(plotLine)
     print(plotLineStr)
