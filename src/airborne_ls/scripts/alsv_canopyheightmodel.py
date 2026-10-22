@@ -55,6 +55,12 @@ def getCmdargs():
         help=("Percentage of points from neighbouring bins to keep for per-bin " +
             "DEM interpolation (default=%(default)s). Smaller values will run faster, " +
             "but too small can leave extra holes in DEM"))
+    p.add_argument("--minhag", type=float, default=0,
+        help=("Minimum acceptable value of HAG (metres). Points below this are excluded. " +
+              "(default=%(default)s)"))
+    p.add_argument("--maxhag", type=float, default=120,
+        help=("Maximum acceptable value of HAG (metres). Points above this are excluded. " +
+              "(default=%(default)s)"))
     p.add_argument("--noparallelread", default=False, action="store_true",
         help=("Disable laspy's parallel reading of LAS/LAZ files. By default, laspy will " +
               "try to use as many CPU cores as it can"))
@@ -163,16 +169,22 @@ def processOneTile(filename, cmdargs, outfile):
             binPtsWithMarg = gridding_methods.getBinPtsWithMargin(binnedData,
                 binRow, binCol, cmdargs.binmargin, binTopLeftX, binTopLeftY)
 
+            validHag = ((binPts["HAG"] >= cmdargs.minhag) & (binPts["HAG"] <= cmdargs.maxhag))
+            validHagWithMarg = ((binPtsWithMarg["HAG"] >= cmdargs.minhag) &
+                                (binPtsWithMarg["HAG"] <= cmdargs.maxhag))
+
             maxH_grid = np.full((nRowsPerBin, nColsPerBin), nullVal,
                                dtype=np.float32)
             (pixRow, pixCol) = gridding_methods.xyToRowCol(
-                binPts["X"], binPts["Y"], binTopLeftX, binTopLeftY, pixSize)
+                binPts["X"][validHag], binPts["Y"][validHag],
+                binTopLeftX, binTopLeftY, pixSize)
 
-            gridding_methods.maxH_array(pixRow, pixCol, binPts["HAG"], maxH_grid)
+            gridding_methods.maxH_array(pixRow, pixCol, binPts["HAG"][validHag], maxH_grid)
 
             vegPtsMask = np.logical_and(
                 binPtsWithMarg["CLASSIFICATION"] >= const.PTCLASS_LOWVEGETATION,
                 binPtsWithMarg["CLASSIFICATION"] <= const.PTCLASS_HIGHVEGETATION,
+                validHagWithMarg
             )
 
             hag = binPtsWithMarg[vegPtsMask]['HAG']
@@ -186,8 +198,8 @@ def processOneTile(filename, cmdargs, outfile):
             classCountsShape = (CLASSCOUNTS_MAXCLASS + 1, nRowsPerBin, nColsPerBin)
             classCounts = np.zeros(classCountsShape, dtype=np.uint16)
             gridding_methods.makeClassCounts(pixRow, pixCol, binPts["X"],
-                binPts["Y"], binPts["Z"], binPts["CLASSIFICATION"],
-                classCounts)
+                binPts["Y"][validHag], binPts["Z"][validHag],
+                binPts["CLASSIFICATION"][validHag], classCounts)
             nonGroundClasses = np.full((nRowsPerBin, nColsPerBin), 254, dtype=np.uint8)
             # nonGroundClasses is most common non-ground class in each pixel
             classCountsNonGround = np.copy(classCounts)
