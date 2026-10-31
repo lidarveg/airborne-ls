@@ -38,7 +38,7 @@ tends to be somewhat smoother and more complete than the maximum height raster d
 
 ## Foliage Projective Cover
 This is calculated using the algorithm of Fisher et al (2020). It uses lidar point returns
-to estimate Foliage projective Cover for each pixel, and requires a relatively coarse
+to estimate Foliage Projective Cover for each pixel, and requires a relatively coarse
 pixel size (default is 10 metres). The pixel values are expressed as percentages (i.e.
 the percentage of the area which is covered by foliage, projected downwards), and a colour
 table is added to identify areas of denser foliage as darker green.
