@@ -57,6 +57,8 @@ and the project name.
 
 All subsequent processing works with these standardised LAZ files.
 
+For further details see [alsv_lidar_standardisation](alsv_lidar_standardisation.md).
+
 ## Add Height Above Ground
 For every point return which is not classified as "Ground", calculate its height above
 the interpolated ground surface, and store this in the LAZ file. This is then available to
@@ -67,6 +69,8 @@ alsv_addhag --indir alsProjectDir-std --tilesize 1000
 ```
 
 The LAZ files are updated in place.
+
+For further detail see [alsv_addhag](alsv_addhag.md).
 
 ## Producing per-tile raster products
 The next step is to produce a range of raster images from these standardised LAZ files.
@@ -80,17 +84,17 @@ These are produced for each LAZ tile, in a subdirectory under the directory cont
 standardised LAZ files, each subdirectory being named to match its corresponding LAZ file
 (without the `.laz` suffix). 
 
-The various interpolations from irregular point data are done using Natural Neighbour interpolation,
-at the level of individual index bins, and will use data from surrounding bins (including from
-neighbouring tiles) as required. 
-
 ```bash
 alsv_tile_products --indir alsProjectDir-std --tilesize 1000 --pixsize 0.5
 ```
 
+For further details on the output products, see [alsv_tile_products](alsv_tile_products.md).
+
 ## Canopy Height Model
-Some of the products created above represent the height of the vegetation canopy, but have holes
-and defects. The most sophisticated algorithm we have implemented for this is the pit-free
+Some of the products created above represent the top of the vegetation canopy, but have holes
+and defects. Also, they operate on the Z coordinate, rather than height above ground (HAG).
+
+The most sophisticated algorithm we have implemented for canopy height is the pit-free
 canopy height model of Khosravipour et. al (2014). This is fairly slow, taking somewhat more time
 than all the other tile products produced above, and not all users need it, so this is implemented
 in a separate command
