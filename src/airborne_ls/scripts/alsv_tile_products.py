@@ -640,7 +640,7 @@ def makeNonGroundClrTbl():
     Returns:
       clrTblArr: Array of RGB values
     """
-    clrTblArr = np.full((256, 3), 0, dtype=np.uint8)
+    clrTblArr = np.zeros((256, 3), dtype=np.uint8)
     clrTblArr[0] = (254, 254, 254)  # never classified:
     clrTblArr[1] = (200, 200, 200)  # unclassified: light gray
     clrTblArr[2] = (0, 0, 0)        # ground classification

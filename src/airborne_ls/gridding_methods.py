@@ -765,7 +765,7 @@ def calcHeightAboveGroundAllBins(binnedData, binMargin, easting, northing):
             # hagNonGround[hagNonGround < 0] = 0
 
             # Populate HAG array for all points in the bin
-            hagBin = np.full(len(binPts), 0, dtype=binPts['Z'].dtype)
+            hagBin = np.zeros(len(binPts), dtype=binPts['Z'].dtype)
             hagBin[nonGroundMask] = hagNonGround
 
             # Append to list over all bins
