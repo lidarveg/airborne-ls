@@ -31,7 +31,7 @@ to the bottom-right bin.
 
 The points are then sorted so that all points for bin 0 are first, then all points in bin 1, etc.
 Within the bin, order is preserved as it was supplied. The index is constructed simply as
-the point nunber of the first point in each bin, and finished with the total number of points.
+the point number of the first point in each bin, and finished with the total number of points.
 This is stored in a pair of VLR records in the output LAZ file, with the user_id &
 record_id values given in `airborne_ls.const`. Selecting points for a given bin requires just
 the range between two consecutive index values.
