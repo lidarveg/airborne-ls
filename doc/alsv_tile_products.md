@@ -2,6 +2,10 @@
 This script takes the standardised LAZ files (including the estimated height above ground) and
 produces a number of raster products.
 
+The various interpolations from irregular point data are done using Natural Neighbour interpolation,
+at the level of individual index bins, and will use data from surrounding bins (including from
+neighbouring tiles) as required. 
+
 ## DEM
 One of the major products is a Digital Elevation Model (DEM). This is interpolated from the
 (X, Y, Z) locations of all points classified in the LAZ file as "ground" points.

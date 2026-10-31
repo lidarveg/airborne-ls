@@ -84,15 +84,11 @@ These are produced for each LAZ tile, in a subdirectory under the directory cont
 standardised LAZ files, each subdirectory being named to match its corresponding LAZ file
 (without the `.laz` suffix). 
 
-The various interpolations from irregular point data are done using Natural Neighbour interpolation,
-at the level of individual index bins, and will use data from surrounding bins (including from
-neighbouring tiles) as required. 
-
 ```bash
 alsv_tile_products --indir alsProjectDir-std --tilesize 1000 --pixsize 0.5
 ```
 
-For further detailes see [alsv_tile_products](alsv_tile_products.md).
+For further details on the output products, see [alsv_tile_products](alsv_tile_products.md).
 
 ## Canopy Height Model
 Some of the products created above represent the top of the vegetation canopy, but have holes
