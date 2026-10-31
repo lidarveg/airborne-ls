@@ -9,12 +9,12 @@ each point.
 
 The HAG values for every point are then packed into an EVLR record, and the whole file is
 re-written with the points as they were and the extra EVLR record. The values
-are scled to whole centimetres and packed as int16 values. The user_id & record_id for
+are scaled to whole centimetres and packed as int16 values. The user_id & record_id for
 this record are defined in `airborne_ls.const`.
 
 Any points for which a ground elevation value could not be interpolated have their HAG value set
-to zero. We should possibly have a missing value indicator instead, but so far have not
-done so.
+to zero. (We should possibly have a missing value indicator instead, but so far have not
+done so.)
 
 All interpolations are done using natural neighbour interpolation.
 
