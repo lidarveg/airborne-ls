@@ -734,42 +734,42 @@ def calcHeightAboveGroundAllBins(binnedData, binMargin, easting, northing):
     """
     allHagList = []
     binSize = binnedData.ndx.binSize
-    for binRow in range(0, binnedData.numBinRows):
-        for binCol in range(0, binnedData.numBinCols):
-            binTopLeftX = easting + binSize * binCol
-            binTopLeftY = northing - binSize * binRow
+    binList = binnedData.getBinList()
+    for (binRow, binCol) in binList:
+        binTopLeftX = easting + binSize * binCol
+        binTopLeftY = northing - binSize * binRow
 
-            binPts = binnedData.getData(binRow, binCol)
-            binPtsWithMarg = getBinPtsWithMargin(binnedData, binRow, binCol,
-                binMargin, binTopLeftX, binTopLeftY)
+        binPts = binnedData.getData(binRow, binCol)
+        binPtsWithMarg = getBinPtsWithMargin(binnedData, binRow, binCol,
+            binMargin, binTopLeftX, binTopLeftY)
 
-            # Select the ground points from the bin-with-margin data, so we tie down the
-            # edges for interpolation
-            groundMask = (binPtsWithMarg['CLASSIFICATION'] == const.PTCLASS_GROUND)
-            groundPts = binPtsWithMarg[groundMask]
+        # Select the ground points from the bin-with-margin data, so we tie down the
+        # edges for interpolation
+        groundMask = (binPtsWithMarg['CLASSIFICATION'] == const.PTCLASS_GROUND)
+        groundPts = binPtsWithMarg[groundMask]
 
-            # Select the non-ground points solely from with the bin itself, as we don't
-            # need to do the neighbouring bins here
-            nonGroundMask = (binPts['CLASSIFICATION'] != const.PTCLASS_GROUND)
-            nonGroundPts = binPts[nonGroundMask]
-            nonGroundXY = np.vstack((nonGroundPts['X'], nonGroundPts['Y'])).T
+        # Select the non-ground points solely from with the bin itself, as we don't
+        # need to do the neighbouring bins here
+        nonGroundMask = (binPts['CLASSIFICATION'] != const.PTCLASS_GROUND)
+        nonGroundPts = binPts[nonGroundMask]
+        nonGroundXY = np.vstack((nonGroundPts['X'], nonGroundPts['Y'])).T
 
-            groundHeight = pynninterp.NaturalNeighbourPts(groundPts['X'], groundPts['Y'],
-                                                          groundPts['Z'], nonGroundXY)
-            hagNonGround = nonGroundPts['Z'] - groundHeight
-            # Remove NaN values, replace with zero (why zero ? I could not think of anything else.
-            # Should I have a nullVal defined for this ?)
-            hagNonGround[np.isnan(hagNonGround)] = 0
-            # Prevent any negative values. I am not at all sure about this, so it is currently
-            # disabled
-            # hagNonGround[hagNonGround < 0] = 0
+        groundHeight = pynninterp.NaturalNeighbourPts(groundPts['X'], groundPts['Y'],
+                                                      groundPts['Z'], nonGroundXY)
+        hagNonGround = nonGroundPts['Z'] - groundHeight
+        # Remove NaN values, replace with zero (why zero ? I could not think of anything else.
+        # Should I have a nullVal defined for this ?)
+        hagNonGround[np.isnan(hagNonGround)] = 0
+        # Prevent any negative values. I am not at all sure about this, so it is currently
+        # disabled
+        # hagNonGround[hagNonGround < 0] = 0
 
-            # Populate HAG array for all points in the bin
-            hagBin = np.zeros(len(binPts), dtype=binPts['Z'].dtype)
-            hagBin[nonGroundMask] = hagNonGround
+        # Populate HAG array for all points in the bin
+        hagBin = np.zeros(len(binPts), dtype=binPts['Z'].dtype)
+        hagBin[nonGroundMask] = hagNonGround
 
-            # Append to list over all bins
-            allHagList.append(hagBin)
+        # Append to list over all bins
+        allHagList.append(hagBin)
 
     # HAG for all bins, preserving point order
     hag = np.concatenate(allHagList)

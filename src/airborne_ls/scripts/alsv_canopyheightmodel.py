@@ -152,61 +152,61 @@ def processOneTile(filename, cmdargs, outfile):
     nRowsPerBin = int(np.ceil(binSize / pixSize))
     nColsPerBin = int(np.ceil(binSize / pixSize))
 
-    for binRow in range(0, binnedData.numBinRows):
-        for binCol in range(0, binnedData.numBinCols):
-            binTopLeftX = easting + binSize * binCol
-            binTopLeftY = northing - binSize * binRow
+    binList = binnedData.getBinList()
+    for (binRow, binCol) in binList:
+        binTopLeftX = easting + binSize * binCol
+        binTopLeftY = northing - binSize * binRow
 
-            # Pixel row/col of this bin (top-left pixel)
-            binTopRow = binRow * nRowsPerBin
-            binLeftCol = binCol * nColsPerBin
-            # A slice which locates the bin within the tile
-            binSlice = (slice(binTopRow, (binTopRow + nRowsPerBin)),
-                        slice(binLeftCol, (binLeftCol + nColsPerBin)))
+        # Pixel row/col of this bin (top-left pixel)
+        binTopRow = binRow * nRowsPerBin
+        binLeftCol = binCol * nColsPerBin
+        # A slice which locates the bin within the tile
+        binSlice = (slice(binTopRow, (binTopRow + nRowsPerBin)),
+                    slice(binLeftCol, (binLeftCol + nColsPerBin)))
 
-            # Point data for this bin, with and without neighbouring margin
-            binPts = binnedData.getData(binRow, binCol)
-            binPtsWithMarg = gridding_methods.getBinPtsWithMargin(binnedData,
-                binRow, binCol, cmdargs.binmargin, binTopLeftX, binTopLeftY)
+        # Point data for this bin, with and without neighbouring margin
+        binPts = binnedData.getData(binRow, binCol)
+        binPtsWithMarg = gridding_methods.getBinPtsWithMargin(binnedData,
+            binRow, binCol, cmdargs.binmargin, binTopLeftX, binTopLeftY)
 
-            validHag = ((binPts["HAG"] >= cmdargs.minhag) & (binPts["HAG"] <= cmdargs.maxhag))
-            validHagWithMarg = ((binPtsWithMarg["HAG"] >= cmdargs.minhag) &
-                                (binPtsWithMarg["HAG"] <= cmdargs.maxhag))
+        validHag = ((binPts["HAG"] >= cmdargs.minhag) & (binPts["HAG"] <= cmdargs.maxhag))
+        validHagWithMarg = ((binPtsWithMarg["HAG"] >= cmdargs.minhag) &
+                            (binPtsWithMarg["HAG"] <= cmdargs.maxhag))
 
-            maxH_grid = np.full((nRowsPerBin, nColsPerBin), nullVal,
-                               dtype=np.float32)
-            (pixRow, pixCol) = gridding_methods.xyToRowCol(
-                binPts["X"][validHag], binPts["Y"][validHag],
-                binTopLeftX, binTopLeftY, pixSize)
+        maxH_grid = np.full((nRowsPerBin, nColsPerBin), nullVal,
+                           dtype=np.float32)
+        (pixRow, pixCol) = gridding_methods.xyToRowCol(
+            binPts["X"][validHag], binPts["Y"][validHag],
+            binTopLeftX, binTopLeftY, pixSize)
 
-            gridding_methods.maxH_array(pixRow, pixCol, binPts["HAG"][validHag], maxH_grid)
+        gridding_methods.maxH_array(pixRow, pixCol, binPts["HAG"][validHag], maxH_grid)
 
-            vegPtsMask = np.logical_and(
-                binPtsWithMarg["CLASSIFICATION"] >= const.PTCLASS_LOWVEGETATION,
-                binPtsWithMarg["CLASSIFICATION"] <= const.PTCLASS_HIGHVEGETATION,
-                validHagWithMarg
-            )
+        vegPtsMask = np.logical_and(
+            binPtsWithMarg["CLASSIFICATION"] >= const.PTCLASS_LOWVEGETATION,
+            binPtsWithMarg["CLASSIFICATION"] <= const.PTCLASS_HIGHVEGETATION,
+            validHagWithMarg
+        )
 
-            hag = binPtsWithMarg[vegPtsMask]['HAG']
-            if len(hag) > 3:
-                chmVeg = gridding_methods.chm_alg(
-                    binPtsWithMarg[vegPtsMask], hag, maxH_grid, pixSize,
-                    binTopLeftX, binTopLeftY, binSize, nRowsPerBin, nColsPerBin, nullVal)
-                chmTile[binSlice] = chmVeg
+        hag = binPtsWithMarg[vegPtsMask]['HAG']
+        if len(hag) > 3:
+            chmVeg = gridding_methods.chm_alg(
+                binPtsWithMarg[vegPtsMask], hag, maxH_grid, pixSize,
+                binTopLeftX, binTopLeftY, binSize, nRowsPerBin, nColsPerBin, nullVal)
+            chmTile[binSlice] = chmVeg
 
-            # Count return classes per-pixel
-            classCountsShape = (CLASSCOUNTS_MAXCLASS + 1, nRowsPerBin, nColsPerBin)
-            classCounts = np.zeros(classCountsShape, dtype=np.uint16)
-            gridding_methods.makeClassCounts(pixRow, pixCol, binPts["X"],
-                binPts["Y"][validHag], binPts["Z"][validHag],
-                binPts["CLASSIFICATION"][validHag], classCounts)
-            nonGroundClasses = np.full((nRowsPerBin, nColsPerBin), 254, dtype=np.uint8)
-            # nonGroundClasses is most common non-ground class in each pixel
-            classCountsNonGround = np.copy(classCounts)
-            classCountsNonGround[const.PTCLASS_GROUND] = 0
-            nonGroundClasses = classCountsNonGround.argmax(axis=0)
-            del classCountsNonGround
-            nonGroundClassesTile[binSlice] = nonGroundClasses
+        # Count return classes per-pixel
+        classCountsShape = (CLASSCOUNTS_MAXCLASS + 1, nRowsPerBin, nColsPerBin)
+        classCounts = np.zeros(classCountsShape, dtype=np.uint16)
+        gridding_methods.makeClassCounts(pixRow, pixCol, binPts["X"],
+            binPts["Y"][validHag], binPts["Z"][validHag],
+            binPts["CLASSIFICATION"][validHag], classCounts)
+        nonGroundClasses = np.full((nRowsPerBin, nColsPerBin), 254, dtype=np.uint8)
+        # nonGroundClasses is most common non-ground class in each pixel
+        classCountsNonGround = np.copy(classCounts)
+        classCountsNonGround[const.PTCLASS_GROUND] = 0
+        nonGroundClasses = classCountsNonGround.argmax(axis=0)
+        del classCountsNonGround
+        nonGroundClassesTile[binSlice] = nonGroundClasses
 
     # Interpolating over buildings & water can be a problem - mask out affected pixels here
     veg_msk = np.logical_or(nonGroundClassesTile == const.PTCLASS_BUILDING,
