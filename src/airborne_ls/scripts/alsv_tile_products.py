@@ -233,13 +233,13 @@ def run_tile_products(cmdargs):
             nRowsPerBin = int(np.ceil(binSize / cmdargs.pixsize))
             nColsPerBin = int(np.ceil(binSize / cmdargs.pixsize))
 
-            for binRow in range(0, binnedData.numBinRows):
-                for binCol in range(0, binnedData.numBinCols):
-                    with timings.interval('total_processing'):
-                        processOneBin(binRow, binCol, cmdargs, binSize, binnedData,
-                            easting, northing, nRowsPerBin, nColsPerBin, nullVal,
-                            demTile, csmTile, maxhTile, intensTile, ptDenTile, grTile,
-                            non_grTile, pctTile, fpcTile, timings)
+            binList = binnedData.getBinList()
+            for (binRow, binCol) in binList:
+                with timings.interval('total_processing'):
+                    processOneBin(binRow, binCol, cmdargs, binSize, binnedData,
+                        easting, northing, nRowsPerBin, nColsPerBin, nullVal,
+                        demTile, csmTile, maxhTile, intensTile, ptDenTile, grTile,
+                        non_grTile, pctTile, fpcTile, timings)
 
             del binnedData
 

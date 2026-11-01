@@ -243,6 +243,23 @@ class BinnedData:
         """
         return sum([len(self.dataByBin[k]) for k in self.dataByBin])
 
+    def getBinList(self):
+        """
+        Return a list of the bin row/col pairs to traverse all bins in the tile, in the
+        order which matches how the points are arranged in the file. This runs from the
+        top-left bin (0, 0) to the bottom-right bin (numBinRows, numBinCols), in row-major
+        order (i.e. across the rows and then down). Each list element is a tuple (binRow, binCol).
+
+        Note that self may also hold some bins loaded from neighbouring tiles, e.g.
+        binRow = -1, etc., but these are not included in this list.
+
+        Returns:
+          binList (list of tuple): List of bin (row, col) values
+        """
+        binList = [(binRow, binCol) for binRow in range(self.numBinRows)
+            for binCol in range(self.numBinCols)]
+        return binList
+
     def mergeNeighbour(self, other, direction):
         """
         Merge the given 'other' instance into the current one. Direction is from the perspective
