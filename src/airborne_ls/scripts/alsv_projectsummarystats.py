@@ -72,8 +72,9 @@ def main():
     print(f"Num files: {len(filelist)}")
     print(f"Total area: {int(round(totalArea / 1E6))} sq-km")
     print(f"Mean point density: {meanPointDensity:.1f} pts/sq-m")
-    print("\nPoint density distribution (over tiles). Boxplot whiskers at 5th & 95th percentile")
-    plotting.asciiBoxplot(densityArr, None)
+    if len(densityArr) > 5:
+        print("\nPoint density distribution (over tiles). Boxplot whiskers at 5th & 95th percentile")
+        plotting.asciiBoxplot(densityArr, None)
     print("\nData ranges")
     print(f"    X: [{allMin[0]:.2f}, {allMax[0]:.2f}]")
     print(f"    Y: [{allMin[1]:.2f}, {allMax[1]:.2f}]")
