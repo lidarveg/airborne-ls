@@ -666,6 +666,9 @@ def trimNeighbourBin(data, binRowOff, binColOff, binMargin, topLeftX, topLeftY, 
       trimmedData: The subset of the given point data which lies closest
                    to the central bin
     """
+    if len(data) == 0:
+        return data
+
     # Point (X, Y) coords
     x = data['X']
     y = data['Y']
@@ -754,9 +757,13 @@ def calcHeightAboveGroundAllBins(binnedData, binMargin, easting, northing):
         nonGroundPts = binPts[nonGroundMask]
         nonGroundXY = np.vstack((nonGroundPts['X'], nonGroundPts['Y'])).T
 
-        groundHeight = pynninterp.NaturalNeighbourPts(groundPts['X'], groundPts['Y'],
-                                                      groundPts['Z'], nonGroundXY)
-        hagNonGround = nonGroundPts['Z'] - groundHeight
+        if len(groundPts) > 3:
+            groundHeight = pynninterp.NaturalNeighbourPts(groundPts['X'], groundPts['Y'],
+                                                          groundPts['Z'], nonGroundXY)
+            hagNonGround = nonGroundPts['Z'] - groundHeight
+        else:
+            hagNonGround = np.zeros(len(nonGroundPts), dtype=binPts['Z'].dtype)
+
         # Remove NaN values, replace with zero (why zero ? I could not think of anything else.
         # Should I have a nullVal defined for this ?)
         hagNonGround[np.isnan(hagNonGround)] = 0
