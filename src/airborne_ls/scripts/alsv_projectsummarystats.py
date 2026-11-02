@@ -73,7 +73,8 @@ def main():
     print(f"Total area: {int(round(totalArea / 1E6))} sq-km")
     print(f"Mean point density: {meanPointDensity:.1f} pts/sq-m")
     if len(densityArr) > 5:
-        print("\nPoint density distribution (over tiles). Boxplot whiskers at 5th & 95th percentile")
+        print("\nPoint density distribution (over tiles). " +
+              "Boxplot whiskers at 5th & 95th percentile")
         plotting.asciiBoxplot(densityArr, None)
     print("\nData ranges")
     print(f"    X: [{allMin[0]:.2f}, {allMax[0]:.2f}]")
