@@ -1,0 +1,28 @@
+How to create a versioned release. Version numbers should follow semantic versioning
+conventions (see https://semver.org).
+
+1. Make sure you have merged into 'main' everything that you wish to be included.
+2. As a single pull request:
+    - Update the version number A.B.C in src/airborne_ls/__init__.py
+    - Update doc/ReleaseNotes.md with all changes since the last release
+   Merge this pull request into 'main'.
+3. Check out a clean copy of the repository into /tmp or somewhere similar
+   and 'cd' into it. This matters because we don't want to pick up any
+   work-in-progress or otherwise temporary files laying about in your
+   current clone of the repo.
+4. Create the distribution tar.gz file, using
+       python -m build .
+   This creates a tar.gz, under a subdirectory called dist/,
+       e.g. dist/airborne_ls-1.2.3.tar.gz
+5. Go to the https://github.com/lidarveg/airborne-ls/releases page, and create a 
+   new release by pressing "Draft a new release". 
+   You should fill in the following:
+       Tag version: A.B.C
+       Release Title: Version A.B.C
+       Description: Add a brief description (a few lines at most) explaining
+                    the key points about this release.
+       Upload files: Add the tar.gz.
+       Click "Publish release"
+
+
+
