@@ -4,7 +4,8 @@ conventions (see https://semver.org).
 1. Make sure you have merged into 'main' everything that you wish to be included.
 2. As a single pull request:
     - Update the version number A.B.C in src/airborne_ls/__init__.py
-    - Update doc/ReleaseNotes.md with all changes since the last release
+    - Update doc/ReleaseNotes.md with all changes since the last release (check the
+      git logs to find everything)
    Merge this pull request into 'main'.
 3. Check out a clean copy of the repository into /tmp or somewhere similar
    and 'cd' into it. This matters because we don't want to pick up any
