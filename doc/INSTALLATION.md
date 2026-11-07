@@ -12,7 +12,9 @@ installation method. See below for some common approaches.
   * [numba](https://numba.pydata.org/)
   * [pynninterp](https://gitlab.com/jrsrp/sys/lidar/pynninterp) (installing this will require a C compiler)
 
-The `airborne-ls` package itself is only hosted on its Github repository, and can be installed directly from there.
+The `airborne-ls` package itself is only hosted on its Github repository, and can be installed
+directly from there (optionally specifying a version number tag), or by downloading the
+selected release `tar.gz` file (https://github.com/lidarveg/airborne-ls/releases).
 
 ### Optional Dependencies
   * [richdem](https://richdem.readthedocs.io/). Used for hydrological flow accumulation from
@@ -24,7 +26,7 @@ Most of the required packages can be installed using [conda](https://continuumio
 ```bash
 conda create --channel conda-forge -n airborne-ls pip gdal scipy laspy lazrs-python pyproj numba
 conda activate airborne-ls
-pip install git+https://github.com/lidarveg/airborne-ls
+pip install git+https://github.com/lidarveg/airborne-ls/releases/tag/0.9.0
 ```
 
 The pip command installs both `pynninterp` and `airborne-ls`, but uses the other packages from those
@@ -40,7 +42,7 @@ as this cannot be installed via `pip`. This should include the Python bindings, 
 Once you have a full installation of GDAL, the remaining requirements can be installed using `pip`, as follows
 
 ```bash
-pip install git+https://github.com/lidarveg/airborne-ls
+pip install git+https://github.com/lidarveg/airborne-ls/releases/tag/0.9.0
 ```
 
 ## Installation with `uv`
@@ -60,7 +62,7 @@ cat >> pyproject.toml <<EOF
 constraint-dependencies = ["gdal==$(gdal-config --version)"]
 EOF
 
-uv add git+https://github.com/lidarveg/airborne-ls
+uv add git+https://github.com/lidarveg/airborne-ls/releases/tag/0.9.0
 ```
 
 If your gdal version is < 3.9, then you will also need to restrict numpy to be < 2.
