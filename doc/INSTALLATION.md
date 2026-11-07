@@ -26,7 +26,7 @@ Most of the required packages can be installed using [conda](https://continuumio
 ```bash
 conda create --channel conda-forge -n airborne-ls pip gdal scipy laspy lazrs-python pyproj numba
 conda activate airborne-ls
-pip install git+https://github.com/lidarveg/airborne-ls/releases/tag/0.9.0
+pip install git+https://github.com/lidarveg/airborne-ls@0.9.0
 ```
 
 The pip command installs both `pynninterp` and `airborne-ls`, but uses the other packages from those
@@ -42,7 +42,7 @@ as this cannot be installed via `pip`. This should include the Python bindings, 
 Once you have a full installation of GDAL, the remaining requirements can be installed using `pip`, as follows
 
 ```bash
-pip install git+https://github.com/lidarveg/airborne-ls/releases/tag/0.9.0
+pip install git+https://github.com/lidarveg/airborne-ls@0.9.0
 ```
 
 ## Installation with `uv`
@@ -62,7 +62,7 @@ cat >> pyproject.toml <<EOF
 constraint-dependencies = ["gdal==$(gdal-config --version)"]
 EOF
 
-uv add git+https://github.com/lidarveg/airborne-ls/releases/tag/0.9.0
+uv add git+https://github.com/lidarveg/airborne-ls@0.9.0
 ```
 
 If your gdal version is < 3.9, then you will also need to restrict numpy to be < 2.
