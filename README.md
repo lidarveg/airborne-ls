@@ -15,6 +15,8 @@ raster images at suitable resolutions.
 
 See [doc/INSTALLATION.md](doc/INSTALLATION.md) for details on dependencies and installation
 
+For descriptions of each versioned release, see [doc/ReleaseNotes.md](doc/ReleaseNotes.md).
+
 ## Usage
 
 See [doc/USAGE.md](doc/USAGE.md) for details on using the commands.
